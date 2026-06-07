@@ -9,6 +9,10 @@ Build a platform that imports AI red-teaming exports, independently re-evaluates
 
 The platform evaluates the **model output**, not whether the original prompt is malicious.
 
+![alt text](image.png)
+
+![alt text](image-1.png)
+
 ## Core principle
 
 The new Judge need to understand the context of the target, for this each analyst can create is own system prompt for the llm as a judge. based on that, the llm as judge will categorize the **model output**
