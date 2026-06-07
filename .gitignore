@@ -3,6 +3,8 @@
 .codex/
 prompts/
 usage_tokens.json
+AGENTS.md
+CLAUDE.md
 
 # Secrets and local environment
 .env
