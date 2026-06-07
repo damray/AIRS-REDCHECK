@@ -66,6 +66,99 @@ masked in UI-facing responses.
 For production, replace the default Compose database password, keep PostgreSQL
 storage on a persistent volume, and run the API and worker as separate processes.
 
+## Application menu
+
+The left navigation separates operational work from setup work.
+
+### Triage
+
+Shows the automated comparison summary after Judge evaluation. Use it to monitor
+processed attempts, remaining attempts, agreements, disagreements, uncertain
+cases, and evaluation errors. These numbers are triage signals only; they are
+not confirmed quality metrics.
+
+### Review
+
+Contains the analyst review queue. Use it to inspect source output, Judge
+verdict, comparison status, attempt detail, and agent timelines. Analysts can
+confirm the source verdict, confirm the Judge verdict, mark the case ambiguous,
+and add reviewer comments. This is the quality-control step that turns automated
+signals into adjudicated cases.
+
+### Quality
+
+Shows reviewed quality metrics only after human adjudication. Accuracy,
+precision, recall, F1, and the confusion matrix are computed from reviewed
+non-ambiguous cases, with the human-confirmed verdict treated as ground truth.
+
+### Export
+
+Downloads CSV working sets. Use presets for normalized results, disagreements,
+or reviewed cases, or build a filtered export by comparison status, verdict,
+input type, review state, and text search.
+
+### Datasets
+
+Imports CSV or JSON red-team exports, shows import summaries and parsing errors,
+and starts evaluation jobs. Static exports and agent exports are normalized into
+streams and attempts while preserving the raw imported payload.
+
+### Judge config
+
+Creates Portkey gateway profiles and Judge prompt profiles. Configure model
+routing, timeout, temperature, system prompt, and rubric here before running
+evaluation jobs. Portkey secrets stay backend-only and are masked in UI-facing
+responses.
+
+## Recommended workflow
+
+Use a repeatable process. The quality of the final metrics depends on consistent
+configuration, clean imports, and disciplined human review.
+
+1. Configure the Judge in `Judge config`.
+   Create or select a Portkey gateway profile, save the API key, choose routing
+   by provider slug or config ID, set the Judge model, then create a prompt
+   profile. The prompt and rubric should describe the target context and make it
+   explicit that the Judge evaluates the model output, not the source label.
+
+2. Import data in `Datasets`.
+   Upload a CSV or JSON export and check the import summary. Review parsing
+   errors before running evaluations, because bad normalization will reduce the
+   usefulness of the review queue. Valid records are still imported when other
+   records fail.
+
+3. Run evaluation from `Datasets`.
+   Select the dataset, Portkey profile, and prompt profile, then start the
+   evaluation job. The worker persists jobs in PostgreSQL, retries temporary
+   failures, and can resume after restart.
+
+4. Monitor results in `Triage`.
+   Watch processing progress, disagreements, uncertain cases, and evaluation
+   errors. Treat automated disagreements as suspected issues. A source-stricter
+   or Judge-stricter status is a review priority, not a confirmed false positive
+   or false negative.
+
+5. Adjudicate in `Review`.
+   Work through disagreements, uncertain cases, and evaluation errors. For each
+   case, inspect the model output first, then the prompt and metadata context.
+   Confirm the source verdict, confirm the Judge verdict, or mark the case
+   ambiguous. Add comments when the decision depends on policy interpretation,
+   target context, or missing evidence.
+
+6. Check impact in `Quality`.
+   Use reviewed quality metrics only after enough cases have been adjudicated.
+   Track review coverage alongside precision, recall, F1, and the confusion
+   matrix; low coverage can make the metrics misleading.
+
+7. Export working sets from `Export`.
+   Export reviewed cases for audit trails, disagreements for follow-up, or a
+   filtered subset for policy calibration. Keep exported files under the same
+   data-handling controls as the original red-team payloads.
+
+For best results, calibrate the Judge prompt on a small reviewed sample before
+processing large datasets, keep the same prompt profile for comparable runs, and
+separate technical evaluation errors from safety disagreements.
+
 ## Recommended first milestone
 
 Implement the smallest end-to-end vertical slice:
