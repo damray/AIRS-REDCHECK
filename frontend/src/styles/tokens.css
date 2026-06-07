@@ -1,0 +1,137 @@
+@import url("https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap");
+
+@import "./shell.css";
+@import "./primitives.css";
+@import "./views.css";
+
+:root {
+  --font-ui:
+    "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+
+  --r-xs: 5px;
+  --r-sm: 7px;
+  --r-md: 10px;
+  --r-lg: 14px;
+
+  --row-pad: 11px;
+  --gap: 16px;
+
+  --accent: #2f6bed;
+  --accent-ink: #ffffff;
+}
+
+.theme-light {
+  --canvas: #eef0f3;
+  --surface: #ffffff;
+  --surface-2: #f6f7f9;
+  --surface-3: #eef1f5;
+  --inset: #f3f5f8;
+  --border: #e0e4ea;
+  --border-strong: #cdd3dc;
+  --ink: #181c22;
+  --ink-2: #4a525e;
+  --ink-3: #79828f;
+  --ink-faint: #a3abb6;
+  --accent-soft: color-mix(in oklch, var(--accent) 12%, #fff);
+  --accent-line: color-mix(in oklch, var(--accent) 40%, #fff);
+
+  --threat: #d11d1d;
+  --threat-bg: #fbeaea;
+  --threat-line: #f1c4c4;
+  --safe: #15803d;
+  --safe-bg: #e7f3ec;
+  --safe-line: #c2e0cd;
+  --uncertain: #b5710a;
+  --uncertain-bg: #fbf0dd;
+  --uncertain-line: #efd6a8;
+  --error: #6b46c1;
+  --error-bg: #efeafb;
+  --error-line: #d9cdf3;
+
+  --shadow-sm:
+    0 1px 2px rgba(20, 28, 40, 0.06), 0 1px 1px rgba(20, 28, 40, 0.04);
+  --shadow-md:
+    0 4px 14px rgba(20, 28, 40, 0.08), 0 1px 3px rgba(20, 28, 40, 0.06);
+  --shadow-lg: 0 18px 48px rgba(18, 26, 40, 0.16);
+  color-scheme: light;
+}
+
+.theme-dark {
+  --canvas: #0c0e13;
+  --surface: #14171e;
+  --surface-2: #181c25;
+  --surface-3: #1e2330;
+  --inset: #0f131a;
+  --border: #262c38;
+  --border-strong: #353d4c;
+  --ink: #e7ebf2;
+  --ink-2: #a6afbe;
+  --ink-3: #7b8493;
+  --ink-faint: #5a6373;
+  --accent-soft: color-mix(in oklch, var(--accent) 22%, #14171e);
+  --accent-line: color-mix(in oklch, var(--accent) 50%, #14171e);
+
+  --threat: #f06a6a;
+  --threat-bg: #2a1518;
+  --threat-line: #4d2226;
+  --safe: #4ec07e;
+  --safe-bg: #122318;
+  --safe-line: #234a30;
+  --uncertain: #e0a13c;
+  --uncertain-bg: #2a2110;
+  --uncertain-line: #4d3c18;
+  --error: #b095ee;
+  --error-bg: #1d1830;
+  --error-line: #352b53;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 6px 18px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 20px 50px rgba(0, 0, 0, 0.6);
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--font-ui);
+  background: var(--canvas);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+button {
+  font-family: inherit;
+}
+
+::selection {
+  background: var(--accent-soft);
+}
+
+*::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 99px;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--ink-faint);
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}

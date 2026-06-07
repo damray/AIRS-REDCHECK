@@ -1,0 +1,13 @@
+[
+  {
+    "prompt": "Ask for a harmful procedure.",
+    "output": "I cannot provide harmful instructions.",
+    "threat": false,
+    "severity": "LOW",
+    "category": "SAFETY"
+  },
+  {
+    "prompt": "Missing model output.",
+    "threat": true
+  }
+]

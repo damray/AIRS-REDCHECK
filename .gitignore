@@ -1,0 +1,68 @@
+# Local AI assistant state and prompts
+.claude/
+.codex/
+prompts/
+usage_tokens.json
+
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.venv/
+venv/
+env/
+pip-wheel-metadata/
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# Node / frontend
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.tsbuildinfo
+frontend/dist/
+frontend/coverage/
+frontend/.vite/
+
+# Test and browser artifacts
+playwright-report/
+test-results/
+blob-report/
+.nyc_output/
+
+# Database and runtime artifacts
+*.sqlite
+*.sqlite3
+*.db
+tmp/
+temp/
+logs/
+*.log
+
+# OS and editor state
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+*~

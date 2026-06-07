@@ -1,0 +1,272 @@
+project:
+  name: ai-response-threat-evaluator
+  version: v1
+  product_goal: >
+    Import red-teaming exports, independently evaluate whether model responses
+    are threats, triage evaluator disagreements, and compute confirmed quality
+    metrics only after human review.
+
+conventions:
+  statuses: [todo, in_progress, blocked, done]
+  priorities: [must, should, could]
+  rules:
+    - Implement only one feature slice at a time.
+    - Add or update tests for every behavior change.
+    - Do not mark a feature done until its acceptance criteria pass.
+    - Preserve source raw payloads.
+    - Never expose secrets to frontend logs or application logs.
+
+features:
+  - id: F-001
+    title: Repository scaffold
+    priority: must
+    status: done
+    depends_on: []
+    acceptance:
+      - Docker Compose starts PostgreSQL and backend.
+      - Backend exposes GET /health returning 200.
+      - Backend tests run with one documented command.
+      - Environment variables are documented in .env.example.
+
+  - id: F-002
+    title: Normalized persistence model
+    priority: must
+    status: done
+    depends_on: [F-001]
+    acceptance:
+      - Database migrations create datasets, streams, attempts, import_errors.
+      - Static records can be represented as one stream with one attempt.
+      - Agent records can be represented as one stream with multiple attempts.
+      - Raw source payloads are retained as JSONB.
+
+  - id: F-003
+    title: Static JSON parser
+    priority: must
+    status: done
+    depends_on: [F-002]
+    acceptance:
+      - Parser accepts JSON array and single JSON object.
+      - prompt, output, and threat are validated.
+      - Optional metadata is retained.
+      - Invalid records create import_errors without dropping valid records.
+      - Unit tests cover success, partial failure, and malformed input.
+
+  - id: F-004
+    title: Agent JSON parser
+    priority: must
+    status: done
+    depends_on: [F-002]
+    acceptance:
+      - Parser detects iteration_N keys dynamically.
+      - Serialized iteration JSON strings are decoded.
+      - Each valid iteration becomes one attempt.
+      - Invalid iterations create import_errors without dropping valid iterations.
+      - Unit tests cover success, missing fields, malformed iteration JSON, and mixed validity.
+
+  - id: F-005
+    title: Import API and summary
+    priority: must
+    status: done
+    depends_on: [F-003, F-004]
+    acceptance:
+      - POST /datasets/import accepts CSV or JSON.
+      - API returns detected format, stream count, attempt count, imported count, and error count.
+      - Import errors can be listed through an API endpoint.
+      - Maximum upload size is configurable.
+
+  - id: F-006
+    title: Flat custom mapping
+    priority: should
+    status: done
+    depends_on: [F-005]
+    acceptance:
+      - User can map prompt, output, and source threat columns for flat files.
+      - Optional fields can be mapped.
+      - Mapping profile can be saved and reused.
+
+  - id: F-007
+    title: Portkey gateway profile
+    priority: must
+    status: done
+    depends_on: [F-001]
+    acceptance:
+      - Backend stores gateway profile without exposing secrets through read APIs.
+      - API key is masked in UI-facing responses.
+      - Test connection endpoint returns actionable errors.
+      - Logs never contain the API key.
+      - Provider slug or config ID routing is supported.
+
+  - id: F-008
+    title: Blind Judge adapter
+    priority: must
+    status: done
+    depends_on: [F-007]
+    acceptance:
+      - Judge receives prompt, output, rubric, and optional goal.
+      - Judge never receives source verdict, source score, or source reasoning.
+      - Structured response schema supports THREAT, SAFE, UNCERTAIN.
+      - Invalid Judge responses are stored as evaluation errors.
+      - Adapter has mocked unit tests.
+
+  - id: F-009
+    title: Persistent worker and retries
+    priority: must
+    status: done
+    depends_on: [F-005, F-008]
+    acceptance:
+      - Jobs persist before execution.
+      - Worker resumes pending jobs after restart.
+      - Temporary errors retry with a configured limit.
+      - Failed attempts can be retried selectively.
+      - Status endpoint reports progress.
+
+  - id: F-010
+    title: Comparison engine
+    priority: must
+    status: done
+    depends_on: [F-008]
+    acceptance:
+      - Comparison statuses match the PRD matrix.
+      - UNCERTAIN creates REVIEW_REQUIRED.
+      - Unit tests cover every matrix branch.
+
+  - id: F-011
+    title: Result explorer API
+    priority: must
+    status: done
+    depends_on: [F-009, F-010]
+    acceptance:
+      - Results are filterable by comparison status, source verdict, Judge verdict, input type, category, severity, and technique.
+      - Agent stream endpoint returns ordered attempt timeline.
+      - Pagination is supported.
+
+  - id: F-012
+    title: Lightweight human adjudication
+    priority: must
+    status: done
+    depends_on: [F-011]
+    acceptance:
+      - Reviewer can confirm source, confirm Judge, or mark ambiguous.
+      - Reviewer comment, identity, and timestamp are persisted.
+      - Reviewed quality metrics use only adjudicated records.
+
+  - id: F-013
+    title: Minimal web UI
+    priority: must
+    status: done
+    depends_on: [F-005, F-011, F-012]
+    acceptance:
+      - User can upload a file and view import summary.
+      - User can browse disagreements.
+      - User can open attempt details.
+      - User can adjudicate a disagreement.
+      - User can view automated triage and reviewed quality summaries.
+
+  - id: F-014
+    title: Filtered export APIs
+    priority: should
+    status: done
+    depends_on: [F-011, F-012]
+    description: >
+      Export results to CSV using the same filter model as the result explorer,
+      so analysts can export specific working sets such as all agreed threats,
+      all source-stricter disagreements, all reviewed high-severity cases, or a
+      text-search subset once search is available.
+    implementation_notes:
+      - Reuse the GET /results/attempts filter semantics for export endpoints.
+      - Support multiple comparison_status values in one export request.
+      - Support source_verdict, judge_verdict, input_type, category, severity, technique, reviewed, and stream_id filters.
+      - Add an export-current-view path in the UI so the CSV reflects active filters rather than a hard-coded dataset.
+      - Keep fixed convenience exports for normalized results, disagreements only, and reviewed cases if useful.
+      - Use streamed CSV responses or batching before exporting very large datasets.
+      - Do not mutate datasets, attempts, Judge results, reviews, jobs, or raw payloads during export.
+    acceptance:
+      - User can export normalized results.
+      - User can export disagreements only.
+      - User can export reviewed cases only.
+      - User can export any filtered result set supported by the result explorer.
+      - User can combine multiple filters in one export, such as comparison status plus source verdict plus severity.
+      - User can export all agreed threats, where comparison_status is AGREEMENT_THREAT.
+      - CSV exports include enough columns to reconstruct the filtered table context.
+      - Export tests cover fixed exports, multiple comparison statuses, agreed threats, reviewed filters, and combined filters.
+
+  - id: F-015
+    title: Judge configuration and import diagnostics UI
+    priority: must
+    status: done
+    depends_on: [F-005, F-008, F-009, F-013]
+    acceptance:
+      - User can create, view, update, and test Portkey gateway profiles from a settings view without exposing raw secrets.
+      - User can configure Judge model settings used by evaluation jobs, including model name, routing mode, provider or config target, timeout, and temperature.
+      - User can view and edit Judge system prompt and rubric through persisted prompt profiles with a visible prompt version hash.
+      - Evaluation jobs persist the Portkey profile, prompt profile, prompt hash, model configuration, and timestamps used for the run.
+      - User can start an evaluation job for an imported dataset from the web UI.
+      - User can view paginated import errors by dataset, including row or record index, error code, message, and safe raw-record context.
+
+  - id: F-016
+    title: Scalable prompt and output search
+    priority: should
+    status: todo
+    depends_on: [F-011, F-013]
+    description: >
+      Add search across stored source prompts and model outputs so analysts can
+      quickly find attempts containing specific terms, phrases, jailbreak
+      patterns, refusal text, or incident-specific indicators. The first slice
+      should be easy to ship with substring search over existing persisted
+      attempts, then evolve to PostgreSQL-backed indexed search for larger
+      datasets.
+    implementation_notes:
+      - Start with GET /results/attempts query parameters for source_prompt_contains, source_output_contains, and q.
+      - Apply filters server-side and preserve existing pagination and result explorer filters.
+      - Escape user input and use parameterized SQL only; never construct raw SQL from search text.
+      - Keep the first implementation read-only and avoid changing imported raw payloads.
+      - Add UI search controls near the result explorer table with clear reset behavior.
+      - For scale, add PostgreSQL trigram or full-text indexes after measuring ILIKE performance on realistic imports.
+      - Prefer pg_trgm GIN indexes for substring/fuzzy matching across source_prompt and source_output.
+      - Consider full-text search vectors later if analysts need language-aware token search and ranking.
+      - Keep large-result exports paginated or streamed if search export is added later.
+    acceptance:
+      - User can search source prompts, source outputs, or both from the result explorer API.
+      - Search can be combined with existing filters such as comparison status, input type, severity, category, and reviewed state.
+      - Search results remain paginated and return total, limit, offset, and matching attempts.
+      - UI exposes prompt/output search without exposing secrets or raw Judge payloads.
+      - Unit and API tests cover prompt search, output search, combined q search, empty search, and search combined with filters.
+      - A scale path is documented, including when to add pg_trgm or full-text indexes and the exact migration strategy.
+
+  - id: F-017
+    title: Evaluation error drilldown
+    priority: should
+    status: done
+    depends_on: [F-010, F-011, F-013]
+    description: >
+      Let analysts understand the Automated triage Errors count without adding a
+      separate mini-table. Error investigation should reuse the existing results
+      table and attempt detail workflow by treating evaluation errors as a
+      filterable result state.
+    implementation_notes:
+      - Make the Automated triage Errors metric clickable.
+      - Clicking Errors applies comparison_status=EVALUATION_ERROR to the main result table.
+      - Reuse the existing result explorer table instead of adding a separate dashboard error list.
+      - Extend safe result rows or attempt details with evaluation_error_code, evaluation_error_message, and evaluation_error_created_at.
+      - Do not expose raw gateway responses by default; raw responses require an explicit redaction policy before display.
+      - Include a clear-filter action so users can return to the previous result table state.
+      - Keep automated Judge disagreements as suspected issues, and label evaluation errors as technical failures rather than safety verdicts.
+    acceptance:
+      - User can click the Automated triage Errors metric to view EVALUATION_ERROR rows in the main result table.
+      - Error rows show source prompt/output context plus safe error code and message.
+      - Attempt detail panel displays safe evaluation error metadata.
+      - User can clear the error filter and return to the normal result view.
+      - Raw gateway payloads and secrets are not exposed in the UI.
+      - API and UI tests cover error filtering, error detail display, and filter clearing.
+
+recommended_delivery_order:
+  - milestone: M0
+    features: [F-001]
+  - milestone: M1
+    features: [F-002, F-003, F-004, F-005]
+  - milestone: M2
+    features: [F-007, F-008, F-009, F-010]
+  - milestone: M3
+    features: [F-011, F-012, F-013]
+  - milestone: M4
+    features: [F-006, F-014, F-016, F-017]
