@@ -11,14 +11,16 @@ export function TriageView({
   goReview,
   goReviewFiltered,
   pendingCount,
+  projectId,
 }: {
   goReview: () => void;
   goReviewFiltered: (statuses: string[]) => void;
   pendingCount: number;
+  projectId?: string;
 }) {
   const triageQuery = useQuery({
-    queryKey: ["triage-summary"],
-    queryFn: fetchTriageSummary,
+    queryKey: ["triage-summary", projectId ?? ""],
+    queryFn: () => fetchTriageSummary(projectId),
   });
 
   const t: AutomatedTriageSummary = triageQuery.data ?? {

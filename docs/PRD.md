@@ -68,17 +68,25 @@ Each `iteration_N` value is a serialized JSON string that may contain:
 Every imported record becomes:
 
 ```text
-Dataset import
-└── Stream
-    └── Attempt
-        ├── Source evaluator result
-        ├── Independent Judge result
-        └── Optional human review
+Project workspace
+└── Dataset import
+    └── Stream
+        └── Attempt
+            ├── Source evaluator result
+            ├── Independent Judge result
+            └── Optional human review
 ```
 
 A static record is represented as one stream containing one attempt.
 
 An agent record is represented as one stream containing multiple attempts.
+
+A project workspace is a user-facing container for one or more dataset imports.
+It provides a stable label for a customer, application, assessment, campaign, or
+test run without changing the preserved raw imported payloads.
+
+A dataset import can also have a user-facing scan name so an uploaded file can
+be renamed independently from its project workspace.
 
 ## 5. V1 functional scope
 
@@ -284,6 +292,30 @@ Scale path:
 - dataset deletion;
 - concurrency limit;
 - server-side validation.
+
+### FR-018 Project workspaces for scan imports
+Analysts need to organize uploaded scan results by project so multiple imports
+do not become one undifferentiated result set.
+
+Required:
+- create or select a project workspace during JSON or CSV upload;
+- create a default project name from filename and timestamp when the user does
+  not provide one;
+- associate every dataset import with exactly one project workspace;
+- assign every dataset import a user-facing scan name;
+- rename a scan import without mutating the preserved raw imported payload;
+- list project workspaces with import counts and latest activity timestamp;
+- rename a project workspace without mutating imported raw payloads;
+- delete or archive a project workspace with explicit handling for contained
+  datasets, evaluations, reviews, import errors, and jobs;
+- scope dashboards, result explorer filters, import errors, evaluation jobs, and
+  exports by project workspace.
+
+Initial deletion behavior:
+- implement project deletion as soft delete or archive for V1 so evaluation
+  history and human reviews are not accidentally destroyed;
+- hide archived projects from default list and result views;
+- require an explicit later feature before adding permanent hard delete.
 
 ## 6. Explicit V1 non-goals
 

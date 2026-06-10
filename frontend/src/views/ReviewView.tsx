@@ -39,10 +39,12 @@ export function ReviewView({
   initialFilter,
   reviewer,
   setReviewer,
+  projectId,
 }: {
   initialFilter: string[];
   reviewer: string;
   setReviewer: (v: string) => void;
+  projectId?: string;
 }) {
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<string[]>(initialFilter);
@@ -65,8 +67,9 @@ export function ReviewView({
   );
 
   const resultsQuery = useQuery({
-    queryKey: ["results", resultFilters, offset],
-    queryFn: () => fetchResults(resultFilters, offset),
+    queryKey: ["results", resultFilters, offset, projectId ?? ""],
+    queryFn: () =>
+      fetchResults(resultFilters, offset, RESULTS_PAGE_SIZE, projectId),
   });
 
   const attempts = resultsQuery.data?.items ?? [];
@@ -84,14 +87,14 @@ export function ReviewView({
   const selected = attempts.find((a) => a.attempt_id === selectedId) ?? null;
 
   const attemptDetailQuery = useQuery({
-    queryKey: ["attempt-detail", selectedId],
-    queryFn: () => fetchAttemptDetail(selectedId!),
+    queryKey: ["attempt-detail", selectedId, projectId ?? ""],
+    queryFn: () => fetchAttemptDetail(selectedId!, projectId),
     enabled: selectedId !== null,
   });
 
   const timelineQuery = useQuery({
-    queryKey: ["timeline", selected?.stream_id],
-    queryFn: () => fetchTimeline(selected!.stream_id),
+    queryKey: ["timeline", selected?.stream_id, projectId ?? ""],
+    queryFn: () => fetchTimeline(selected!.stream_id, projectId),
     enabled:
       selected?.input_type === "agent" &&
       (selected?.stream_id?.length ?? 0) > 0,
@@ -285,7 +288,7 @@ export function ReviewView({
             reviewPending={reviewMutation.isPending}
             reviewSuccess={reviewMutation.isSuccess}
             reviewError={reviewMutation.error}
-            exportUrl={filteredExportUrl(resultFilters)}
+            exportUrl={filteredExportUrl(resultFilters, projectId)}
           />
         )}
       </div>

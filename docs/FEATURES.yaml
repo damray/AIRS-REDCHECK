@@ -259,6 +259,187 @@ features:
       - Raw gateway payloads and secrets are not exposed in the UI.
       - API and UI tests cover error filtering, error detail display, and filter clearing.
 
+  - id: F-018
+    title: Project workspaces for scan imports
+    priority: must
+    status: done
+    depends_on: [F-005, F-011, F-013]
+    description: >
+      Add project workspaces as user-facing containers for uploaded scan
+      results. Each dataset import belongs to one project so analysts can
+      separate previous scans by customer, application, assessment, campaign, or
+      test run, then rename the scan or archive the project without changing
+      preserved raw imported payloads.
+    implementation_notes:
+      - Introduce a persisted project/workspace model above datasets.
+      - Require every dataset import to reference exactly one project/workspace.
+      - Give every dataset import a user-facing scan name that can differ from the original filename.
+      - Let upload create a new project/workspace, attach to an existing one, or create a default project and scan name from filename plus timestamp.
+      - Keep dataset/import terminology internally where it already exists; use project/workspace as the user-facing organization layer.
+      - Add project/workspace list, detail, rename, and archive endpoints.
+      - Add scan import rename support without changing the dataset raw payload.
+      - Prefer soft delete/archive for V1 and hide archived projects from default views.
+      - Do not mutate raw imported payloads when renaming or archiving a project/workspace.
+      - Scope dashboards, result explorer queries, import errors, evaluation jobs, and exports by project/workspace.
+      - Prevent project/workspace archive while evaluation jobs are running, or define a safe cancellation policy before allowing it.
+    acceptance:
+      - User can create or select a project/workspace during file upload.
+      - Upload without provided project/workspace and scan names creates default names from filename and timestamp.
+      - Imported datasets are associated with exactly one project/workspace.
+      - User can rename an uploaded scan import.
+      - User can list project/workspaces with import counts and latest activity timestamp.
+      - User can rename a project/workspace.
+      - User can delete a project/workspace using V1 archive behavior, and archived projects are hidden from default project, dashboard, result, and export views.
+      - Project/workspace-scoped dashboards, result explorer, import errors, evaluation jobs, and exports only include data from the selected project/workspace.
+      - Archiving or renaming a project/workspace, or renaming a scan import, does not alter preserved raw imported payloads.
+      - Backend and UI tests cover create-on-upload, attach-to-existing, default naming, scan rename, project rename, archive, and project-scoped result queries.
+
+  - id: F-019
+    title: Editable and deletable Judge configuration profiles
+    priority: must
+    status: todo
+    depends_on: [F-015]
+    description: >
+      Let users manage existing Judge configuration objects from the Judge
+      config menu. Loading an existing Portkey profile or prompt profile,
+      changing fields, and clicking save must update that selected profile
+      instead of creating a duplicate. Users can also delete or archive profiles
+      that are no longer needed, subject to evaluation-history and running-job
+      safety constraints.
+    implementation_notes:
+      - In the UI, distinguish create-new, edit-existing, duplicate, save changes, and delete actions.
+      - When an existing Portkey profile is selected, Save Profile must call an update path for that profile ID rather than a create path.
+      - When an existing prompt profile is selected, Save Prompt must call an update path for that profile ID rather than a create path.
+      - Allow Portkey profile rename and updates to non-secret fields such as gateway URL, routing mode, provider slug, config ID, model, timeout, temperature, and metadata tags.
+      - Preserve the existing Portkey API key when the secret input is blank or unchanged.
+      - Replace the stored Portkey API key only when the user explicitly enters a new secret value.
+      - Allow prompt profile rename and updates to system prompt and rubric fields.
+      - Recompute and display the prompt version hash after saving prompt or rubric changes.
+      - Add delete buttons with confirmation for Portkey profiles and prompt profiles.
+      - Prefer archive/soft delete when a profile is referenced by historical evaluation jobs.
+      - Block delete or archive for profiles referenced by running evaluation jobs unless a safe cancellation policy exists.
+      - Never expose raw secrets in frontend state, API responses, logs, or test snapshots.
+    acceptance:
+      - User can load an existing Portkey profile, modify fields, save, and see the same profile updated.
+      - Saving an edited Portkey profile does not create a duplicate.
+      - Leaving the Portkey API key field blank preserves the existing stored secret.
+      - Entering a new Portkey API key replaces the stored secret.
+      - User can delete or archive an unused Portkey profile after confirmation.
+      - User cannot delete or archive a Portkey profile used by a running evaluation job.
+      - User can load an existing prompt profile, modify fields, save, and see the same profile updated.
+      - Saving an edited prompt profile does not create a duplicate.
+      - Prompt profile hash updates after system prompt or rubric changes.
+      - User can delete or archive an unused prompt profile after confirmation.
+      - User cannot delete or archive a prompt profile used by a running evaluation job.
+      - UI clearly separates New, Save changes, Duplicate, and Delete actions.
+      - Backend and UI tests cover update versus create, secret preservation, secret replacement, prompt hash update, delete/archive, and blocked delete for profiles in use.
+
+  - id: F-020
+    title: Parallel Judge evaluation workers
+    priority: should
+    status: todo
+    depends_on: [F-009]
+    description: >
+      Allow multiple worker processes to evaluate Judge attempts in parallel
+      without duplicate processing. PostgreSQL remains the work coordinator:
+      workers atomically claim pending evaluation_job_attempt rows using short
+      row-locking transactions, then call the Judge outside the transaction.
+    implementation_notes:
+      - Move from whole-job worker ownership toward attempt-level claiming for active evaluation jobs.
+      - Claim small batches of PENDING or RETRYING evaluation_job_attempt rows with SELECT FOR UPDATE SKIP LOCKED.
+      - Mark claimed rows RUNNING and commit immediately before making any Portkey or provider request.
+      - Never hold database locks while waiting for LLM or gateway responses.
+      - Make worker count and per-worker claim batch size configurable.
+      - Support running N identical worker containers through Docker Compose scaling, for example docker compose up -d --scale worker=4.
+      - Document how to increase, decrease, inspect, and tail worker containers with docker compose up --scale worker=N, docker compose ps, and docker compose logs -f worker.
+      - Generate or configure a worker instance ID at startup for logs, claim metadata, and stale RUNNING recovery.
+      - Keep worker count as an operator/runtime setting for V1 rather than a web UI control.
+      - Do not let the web app directly start or stop Docker containers in V1; that would require orchestration privileges and stronger authorization/audit controls.
+      - If web-controlled scaling is needed later, define it as a separate admin-only orchestration feature with authentication, authorization, audit logging, worker limits, and deployment-target support.
+      - Add or verify indexes that support pending-attempt lookup, such as status, job_id, created_at, and id.
+      - Recalculate job progress from evaluation_job_attempt statuses after attempts finish.
+      - Ensure completed attempts produce at most one active Judge result for a given job attempt.
+      - Recover stale RUNNING attempts after worker restart using a safe timeout or startup recovery policy.
+      - Keep retry limits, temporary error handling, and evaluation error persistence compatible with parallel workers.
+      - Add provider concurrency and rate-limit settings before increasing default worker count.
+    acceptance:
+      - Multiple worker processes can run at the same time without processing the same evaluation_job_attempt twice.
+      - Worker claim transactions use row-level locking with SKIP LOCKED or an equivalent PostgreSQL-safe atomic claim.
+      - Database locks are held only during claim/update transactions and not during Judge calls.
+      - Worker count and claim batch size are configurable.
+      - Operators can scale local worker containers with documented Docker Compose commands.
+      - Operators can inspect running worker containers and view worker logs with documented Docker Compose commands.
+      - The web UI does not expose worker start/stop controls in V1.
+      - Parallel workers can process different attempts from the same large evaluation job.
+      - Job progress remains accurate while multiple workers complete attempts concurrently.
+      - Worker restart recovery returns stale RUNNING attempts to a retryable state without duplicating completed results.
+      - Tests simulate concurrent workers claiming attempts and assert no duplicate Judge results are created.
+      - Tests cover retry behavior, failed attempts, and progress recalculation under parallel processing.
+
+  - id: F-021
+    title: Scan and project evaluation progress UI
+    priority: must
+    status: done
+    depends_on: [F-009, F-013, F-018]
+    description: >
+      Show clear loading and progress states while evaluations are pending,
+      running, retrying, completed, or failed. Analysts should see ongoing
+      progress at scan level and project level instead of wondering whether a
+      Judge run is still active.
+    implementation_notes:
+      - Add scan-level evaluation status surfaces using existing job progress fields where possible.
+      - Show total attempts, processed attempts, succeeded attempts, failed attempts, and remaining attempts.
+      - Show project-level rollups across all visible scans in the selected project/workspace.
+      - Poll job or project status while active evaluations are PENDING, RUNNING, or RETRYING.
+      - Use progress bars for active scans and project summaries.
+      - Keep progress UI compact and operational; avoid marketing-style layout.
+      - Display technical evaluation failures as errors, not confirmed safety verdicts.
+      - Provide clear completed and failed terminal states with retry affordances where already supported.
+      - Do not expose raw Judge payloads, provider responses, prompts, outputs, or secrets in progress summaries.
+    acceptance:
+      - User can see when a scan evaluation is PENDING, RUNNING, RETRYING, COMPLETED, or FAILED.
+      - User can see scan-level progress as processed attempts over total attempts.
+      - User can see succeeded, failed, and remaining attempt counts for an active scan.
+      - User can see project-level evaluation rollups for all visible scans in a project/workspace.
+      - Progress updates automatically while evaluation jobs are active.
+      - Completed and failed states are visually distinct from active loading states.
+      - Progress UI does not expose raw prompts, outputs, Judge payloads, gateway responses, or secrets.
+      - UI tests cover active progress, completed state, failed state, retrying state, and project-level rollups.
+
+  - id: F-022
+    title: Prevent duplicate active evaluations per scan and project
+    priority: must
+    status: todo
+    depends_on: [F-009, F-013, F-018]
+    description: >
+      Prevent users from accidentally creating conflicting active evaluation
+      runs for the same scan or project. The backend must enforce this rule so
+      duplicate work cannot be created from multiple browser tabs, repeated
+      clicks, or direct API calls; the UI should reflect the active state and
+      ask users to wait until the current run reaches a terminal state.
+    implementation_notes:
+      - Treat PENDING, RUNNING, and RETRYING evaluation jobs as active.
+      - Treat COMPLETED, FAILED, and CANCELLED evaluation jobs as terminal.
+      - Reject creation of a new evaluation job for a scan/dataset that already has an active evaluation job.
+      - For project/workspace-level starts, reject a new project evaluation if any scan in that project already has an active evaluation job.
+      - Return a clear 409 Conflict response with the active job ID and safe progress metadata.
+      - Disable or replace Start Evaluation actions in the UI when an active job already exists.
+      - Display the active progress state instead of allowing repeated starts.
+      - Allow explicit re-evaluation only after the previous job reaches a terminal state.
+      - Keep failed-attempt retry behavior separate from starting a duplicate full evaluation.
+      - Enforce duplicate prevention in backend services, not only in frontend state.
+    acceptance:
+      - API rejects a second active evaluation job for the same scan/dataset with 409 Conflict.
+      - API rejects a project/workspace evaluation start when any scan in the project has an active evaluation job.
+      - Conflict responses include the active job ID, status, total attempts, processed attempts, failed attempts, and remaining attempts.
+      - UI disables or replaces Start Evaluation for scans with active jobs.
+      - UI disables or replaces project-level evaluation start when the project has any active scan evaluation.
+      - UI shows the active progress state and asks the user to wait until the current run finishes.
+      - User can start a new full evaluation only after the previous job is COMPLETED, FAILED, or CANCELLED.
+      - Retry failed attempts remains available through the existing retry flow and does not create a duplicate full evaluation.
+      - Backend tests cover duplicate scan start, duplicate project start, terminal-state re-evaluation, and direct API calls.
+      - UI tests cover repeated clicks, active-job disabled state, and conflict response handling.
+
 recommended_delivery_order:
   - milestone: M0
     features: [F-001]
@@ -270,3 +451,9 @@ recommended_delivery_order:
     features: [F-011, F-012, F-013]
   - milestone: M4
     features: [F-006, F-014, F-016, F-017]
+  - milestone: M5
+    features: [F-018]
+  - milestone: M6
+    features: [F-019]
+  - milestone: M7
+    features: [F-020, F-021, F-022]

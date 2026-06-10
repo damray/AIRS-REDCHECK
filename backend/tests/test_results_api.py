@@ -10,12 +10,18 @@ from app.models import (
     HumanReview,
     JudgeResultRecord,
     PortkeyGatewayProfile,
+    Project,
     Stream,
 )
 
 
-def _dataset_with_results(db_session: Session) -> tuple[Dataset, list[Stream], list[Attempt]]:
+def _dataset_with_results(
+    db_session: Session, project_name: str = "Project"
+) -> tuple[Dataset, list[Stream], list[Attempt]]:
+    project = Project(name=project_name)
     dataset = Dataset(
+        project=project,
+        scan_name=f"{project_name} scan",
         source_content_type="application/json",
         detected_format="agent_json",
         parser_version="agent-json-v1",
@@ -356,6 +362,36 @@ def test_results_are_filterable_by_comparison_status(
     body = response.json()
     assert body["total"] == 1
     assert body["items"][0]["comparison_status"] == "SOURCE_STRICTER_THAN_JUDGE"
+
+
+def test_results_and_summaries_are_project_scoped(client: TestClient, db_session: Session) -> None:
+    dataset_a, _, _ = _dataset_with_results(db_session, project_name="Project A")
+    dataset_b, _, _ = _dataset_with_results(db_session, project_name="Project B")
+
+    response = client.get("/results/attempts", params={"project_id": dataset_a.project_id})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 3
+    assert {item["dataset_id"] for item in body["items"]} == {dataset_a.id}
+
+    summary = client.get(
+        "/results/triage-summary", params={"project_id": dataset_a.project_id}
+    ).json()
+    assert summary["total_attempts"] == 3
+    assert summary["errors"] == 1
+
+    quality = client.get(
+        "/results/reviewed-quality", params={"project_id": dataset_a.project_id}
+    ).json()
+    assert quality["total_attempts"] == 3
+    assert quality["reviewed_cases"] == 1
+
+    exported = client.get(
+        "/results/export/normalized.csv", params={"project_id": dataset_a.project_id}
+    )
+    assert exported.status_code == 200
+    assert dataset_a.id in exported.text
+    assert dataset_b.id not in exported.text
 
 
 def test_result_list_uses_excerpts_and_detail_returns_full_text(

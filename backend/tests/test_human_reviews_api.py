@@ -8,12 +8,16 @@ from app.models import (
     EvaluationJobAttempt,
     JudgeResultRecord,
     PortkeyGatewayProfile,
+    Project,
     Stream,
 )
 
 
 def _dataset_with_judge_results(db_session: Session) -> list[Attempt]:
+    project = Project(name="Project")
     dataset = Dataset(
+        project=project,
+        scan_name="Review scan",
         source_content_type="application/json",
         detected_format="static_json",
         parser_version="static-json-v1",

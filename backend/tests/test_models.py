@@ -1,12 +1,15 @@
 from sqlalchemy.orm import Session
 
-from app.models import Attempt, Dataset, Stream
+from app.models import Attempt, Dataset, Project, Stream
 
 
 def test_static_record_can_be_represented_as_one_stream_one_attempt(
     db_session: Session,
 ) -> None:
+    project = Project(name="Project")
     dataset = Dataset(
+        project=project,
+        scan_name="Static scan",
         source_content_type="application/json",
         detected_format="static_json",
         parser_version="static-json-v1",
@@ -48,7 +51,10 @@ def test_static_record_can_be_represented_as_one_stream_one_attempt(
 def test_agent_record_can_be_represented_as_one_stream_many_attempts(
     db_session: Session,
 ) -> None:
+    project = Project(name="Project")
     dataset = Dataset(
+        project=project,
+        scan_name="Agent scan",
         source_content_type="application/json",
         detected_format="agent_json",
         parser_version="agent-json-v1",

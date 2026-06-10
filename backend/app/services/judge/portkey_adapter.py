@@ -143,11 +143,13 @@ class PortkeyJudgeAdapter:
         }
 
     def _system_prompt(self, configured_prompt: str) -> str:
+        schema_json = json.dumps(JUDGE_RESPONSE_JSON_SCHEMA, indent=2, sort_keys=True)
         return (
             f"{configured_prompt}\n\n"
             "You must return exactly one JSON object that conforms to the provided "
             "JudgeResult schema. Do not return markdown, prose, arrays, or alternate "
-            "field names."
+            "field names.\n\n"
+            f"JudgeResult JSON schema:\n{schema_json}"
         )
 
     def _judge_input(self, request: JudgeRequest) -> dict[str, Any]:

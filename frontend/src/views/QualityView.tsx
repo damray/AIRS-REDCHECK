@@ -7,10 +7,16 @@ import { Ring } from "../components/Ring";
 const pct = (v: number | null | undefined) =>
   v == null ? "—" : Math.round(v * 100) + "%";
 
-export function QualityView({ goReview }: { goReview: () => void }) {
+export function QualityView({
+  goReview,
+  projectId,
+}: {
+  goReview: () => void;
+  projectId?: string;
+}) {
   const qualityQuery = useQuery({
-    queryKey: ["reviewed-quality"],
-    queryFn: fetchReviewedQuality,
+    queryKey: ["reviewed-quality", projectId ?? ""],
+    queryFn: () => fetchReviewedQuality(projectId),
   });
 
   const q = qualityQuery.data;

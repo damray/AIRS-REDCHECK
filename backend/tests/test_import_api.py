@@ -1,9 +1,12 @@
 import json
+import re
 from pathlib import Path
 from typing import Any
 
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
 
+from app.models import Dataset
 from app.services.sanitization import NUL_REPLACEMENT
 
 
@@ -21,6 +24,8 @@ def test_import_static_json_returns_summary(client: TestClient) -> None:
     assert body["attempt_count"] == 1
     assert body["imported_count"] == 1
     assert body["error_count"] == 0
+    assert body["project_id"]
+    assert body["scan_name"]
 
 
 def test_import_static_json_accepts_empty_output_string(client: TestClient) -> None:
@@ -95,7 +100,79 @@ def test_list_datasets_returns_imported_datasets(client: TestClient) -> None:
     body = response.json()
     assert len(body) == 1
     assert body[0]["id"] == imported.json()["dataset_id"]
+    assert body[0]["project_id"] == imported.json()["project_id"]
+    assert body[0]["scan_name"] == imported.json()["scan_name"]
     assert body[0]["attempt_count"] == 1
+
+
+def test_import_can_create_project_and_attach_to_existing(client: TestClient) -> None:
+    first = client.post(
+        "/datasets/import",
+        params={
+            "filename": "first.json",
+            "project_name": "Customer A",
+            "scan_name": "Initial scan",
+        },
+        content=json.dumps([{"prompt": "p1", "output": "o1", "threat": False}]),
+        headers={"Content-Type": "application/json"},
+    )
+    assert first.status_code == 201
+    project_id = first.json()["project_id"]
+    assert first.json()["scan_name"] == "Initial scan"
+
+    second = client.post(
+        "/datasets/import",
+        params={
+            "filename": "second.json",
+            "project_id": project_id,
+            "scan_name": "Follow-up scan",
+        },
+        content=json.dumps([{"prompt": "p2", "output": "o2", "threat": True}]),
+        headers={"Content-Type": "application/json"},
+    )
+
+    assert second.status_code == 201
+    assert second.json()["project_id"] == project_id
+    projects = client.get("/projects").json()
+    assert len(projects) == 1
+    assert projects[0]["name"] == "Customer A"
+    assert projects[0]["import_count"] == 2
+
+
+def test_import_without_names_creates_filename_timestamp_defaults(client: TestClient) -> None:
+    response = client.post(
+        "/datasets/import?filename=customer-scan.json",
+        content=json.dumps([{"prompt": "p", "output": "o", "threat": False}]),
+        headers={"Content-Type": "application/json"},
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert re.match(r"customer-scan scan \d{8}-\d{6}", body["scan_name"])
+    project = client.get(f"/projects/{body['project_id']}").json()
+    assert re.match(r"customer-scan project \d{8}-\d{6}", project["name"])
+
+
+def test_scan_rename_preserves_raw_payload(client: TestClient, db_session: Session) -> None:
+    payload = [{"prompt": "raw prompt", "output": "raw output", "threat": False}]
+    imported = client.post(
+        "/datasets/import?filename=static.json&scan_name=Original",
+        content=json.dumps(payload),
+        headers={"Content-Type": "application/json"},
+    )
+    assert imported.status_code == 201
+    dataset_id = imported.json()["dataset_id"]
+
+    renamed = client.put(f"/datasets/{dataset_id}", json={"scan_name": "Renamed scan"})
+
+    assert renamed.status_code == 200
+    assert renamed.json()["scan_name"] == "Renamed scan"
+    dataset = client.get(f"/datasets/{dataset_id}")
+    assert dataset.status_code == 200
+    assert dataset.json()["scan_name"] == "Renamed scan"
+    persisted = db_session.get(Dataset, dataset_id)
+    assert persisted is not None
+    assert persisted.raw_payload == payload
 
 
 def test_reset_imported_datasets_clears_dashboard_counts(client: TestClient) -> None:
@@ -157,6 +234,37 @@ def test_import_partial_failure_errors_can_be_listed(client: TestClient) -> None
     errors = client.get(f"/datasets/{body['dataset_id']}/import-errors")
     assert errors.status_code == 200
     assert errors.json()[0]["error_code"] == "missing_required_fields"
+
+
+def test_import_errors_can_be_project_scoped(client: TestClient) -> None:
+    content = Path("../fixtures/static-partial-failure.json").read_text()
+    imported = client.post(
+        "/datasets/import",
+        params={"project_name": "Scoped errors"},
+        content=content,
+        headers={"Content-Type": "application/json"},
+    )
+    other = client.post(
+        "/datasets/import",
+        params={"project_name": "Other"},
+        content=json.dumps([{"prompt": "p", "output": "o", "threat": False}]),
+        headers={"Content-Type": "application/json"},
+    )
+    assert imported.status_code == 201
+    assert other.status_code == 201
+
+    ok = client.get(
+        f"/datasets/{imported.json()['dataset_id']}/import-errors",
+        params={"project_id": imported.json()["project_id"]},
+    )
+    wrong_project = client.get(
+        f"/datasets/{imported.json()['dataset_id']}/import-errors",
+        params={"project_id": other.json()["project_id"]},
+    )
+
+    assert ok.status_code == 200
+    assert len(ok.json()) == 1
+    assert wrong_project.status_code == 404
 
 
 def test_import_static_csv(client: TestClient) -> None:

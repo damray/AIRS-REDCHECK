@@ -57,7 +57,7 @@ function emptyFilters(): ResultFilters {
   };
 }
 
-export function ExportView() {
+export function ExportView({ projectId }: { projectId?: string }) {
   const [filters, setFilters] = useState<ResultFilters>(emptyFilters);
 
   const hasFilters =
@@ -70,12 +70,15 @@ export function ExportView() {
     filters.outputContains.trim() !== "";
 
   const countQuery = useQuery({
-    queryKey: ["export-preview", filters],
-    queryFn: () => fetchResults(filters, 0, 1),
+    queryKey: ["export-preview", filters, projectId ?? ""],
+    queryFn: () => fetchResults(filters, 0, 1, projectId),
   });
 
   const matchCount = countQuery.data?.total ?? null;
-  const exportUrl = filteredExportUrl(filters);
+  const exportUrl = filteredExportUrl(filters, projectId);
+  const projectQuery = projectId
+    ? `?project_id=${encodeURIComponent(projectId)}`
+    : "";
 
   function toggleStatus(key: string) {
     setFilters((f) => ({
@@ -108,7 +111,7 @@ export function ExportView() {
             <p className="sub">{p.description}</p>
             <a
               className="btn primary"
-              href={p.href}
+              href={`${p.href}${projectQuery}`}
               download={p.filename}
               style={{ textDecoration: "none", marginTop: "auto" }}
             >

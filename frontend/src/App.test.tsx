@@ -108,7 +108,9 @@ const promptProfile = {
 
 const dataset = {
   id: "dataset-1",
+  project_id: "project-1",
   name: null,
+  scan_name: "Baseline scan",
   source_filename: "attacks.json",
   source_content_type: "application/json",
   mapping_profile_id: null,
@@ -118,6 +120,112 @@ const dataset = {
   stream_count: 1,
   attempt_count: 2,
   error_count: 1,
+  created_at: "2026-06-04T00:00:00Z",
+  updated_at: "2026-06-04T00:00:00Z",
+};
+
+const evaluationJobs = [
+  {
+    id: "job-pending",
+    dataset_id: "dataset-1",
+    portkey_gateway_profile_id: "portkey-1",
+    judge_prompt_profile_id: "prompt-1",
+    prompt_hash: "a".repeat(64),
+    model_name: "gpt-test",
+    routing_mode: "provider_slug",
+    provider_slug: "openai",
+    config_id: null,
+    timeout_seconds: 30,
+    temperature: 0.1,
+    status: "PENDING",
+    retry_limit: 2,
+    total_attempts: 10,
+    processed_attempts: 2,
+    succeeded_attempts: 2,
+    failed_attempts: 0,
+    created_at: "2026-06-04T00:00:00Z",
+    updated_at: "2026-06-04T00:01:00Z",
+    started_at: null,
+    completed_at: null,
+  },
+  {
+    id: "job-completed",
+    dataset_id: "dataset-1",
+    portkey_gateway_profile_id: "portkey-1",
+    judge_prompt_profile_id: "prompt-1",
+    prompt_hash: "a".repeat(64),
+    model_name: "gpt-test",
+    routing_mode: "provider_slug",
+    provider_slug: "openai",
+    config_id: null,
+    timeout_seconds: 30,
+    temperature: 0.1,
+    status: "COMPLETED",
+    retry_limit: 2,
+    total_attempts: 2,
+    processed_attempts: 2,
+    succeeded_attempts: 2,
+    failed_attempts: 0,
+    created_at: "2026-06-04T00:02:00Z",
+    updated_at: "2026-06-04T00:03:00Z",
+    started_at: "2026-06-04T00:02:00Z",
+    completed_at: "2026-06-04T00:03:00Z",
+  },
+  {
+    id: "job-failed",
+    dataset_id: "dataset-1",
+    portkey_gateway_profile_id: "portkey-1",
+    judge_prompt_profile_id: "prompt-1",
+    prompt_hash: "a".repeat(64),
+    model_name: "gpt-test",
+    routing_mode: "provider_slug",
+    provider_slug: "openai",
+    config_id: null,
+    timeout_seconds: 30,
+    temperature: 0.1,
+    status: "FAILED",
+    retry_limit: 2,
+    total_attempts: 3,
+    processed_attempts: 3,
+    succeeded_attempts: 1,
+    failed_attempts: 2,
+    created_at: "2026-06-04T00:04:00Z",
+    updated_at: "2026-06-04T00:05:00Z",
+    started_at: "2026-06-04T00:04:00Z",
+    completed_at: "2026-06-04T00:05:00Z",
+  },
+  {
+    id: "job-retrying",
+    dataset_id: "dataset-1",
+    portkey_gateway_profile_id: "portkey-1",
+    judge_prompt_profile_id: "prompt-1",
+    prompt_hash: "a".repeat(64),
+    model_name: "gpt-test",
+    routing_mode: "provider_slug",
+    provider_slug: "openai",
+    config_id: null,
+    timeout_seconds: 30,
+    temperature: 0.1,
+    status: "RETRYING",
+    retry_limit: 2,
+    total_attempts: 4,
+    processed_attempts: 1,
+    succeeded_attempts: 1,
+    failed_attempts: 0,
+    created_at: "2026-06-04T00:06:00Z",
+    updated_at: "2026-06-04T00:07:00Z",
+    started_at: "2026-06-04T00:06:00Z",
+    completed_at: null,
+  },
+];
+
+const project = {
+  id: "project-1",
+  name: "Customer A",
+  is_archived: false,
+  import_count: 1,
+  latest_activity_at: "2026-06-04T00:00:00Z",
+  archived_at: null,
   created_at: "2026-06-04T00:00:00Z",
   updated_at: "2026-06-04T00:00:00Z",
 };
@@ -281,6 +389,64 @@ describe("App", () => {
     );
   });
 
+  it("selects a project workspace for result queries", async () => {
+    renderApp();
+    const user = userEvent.setup();
+
+    await screen.findByRole("option", { name: "Customer A" });
+    await user.selectOptions(
+      screen.getByLabelText("Project workspace"),
+      "project-1",
+    );
+
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith(
+        "/api/results/attempts?comparison_status=SOURCE_STRICTER_THAN_JUDGE&comparison_status=JUDGE_STRICTER_THAN_SOURCE&comparison_status=REVIEW_REQUIRED&project_id=project-1&limit=25&offset=0",
+      );
+    });
+  });
+
+  it("renames a project and scan then archives the project", async () => {
+    renderApp();
+    const user = userEvent.setup();
+
+    await user.click(screen.getByTitle("Datasets"));
+    await screen.findByRole("option", { name: "Customer A (1 imports)" });
+    await user.selectOptions(
+      screen.getByLabelText("Current project"),
+      "project-1",
+    );
+    await user.type(screen.getByLabelText("Rename project"), "Customer B");
+    await user.click(screen.getByRole("button", { name: /Rename project/ }));
+
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith(
+        "/api/projects/project-1",
+        expect.objectContaining({ method: "PUT" }),
+      );
+    });
+
+    await screen.findByRole("option", { name: "Baseline scan (1 errors)" });
+    await user.selectOptions(screen.getByLabelText("Dataset"), "dataset-1");
+    await user.type(screen.getByLabelText("Rename scan"), "Retest scan");
+    await user.click(screen.getByRole("button", { name: /Rename scan/ }));
+
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith(
+        "/api/datasets/dataset-1",
+        expect.objectContaining({ method: "PUT" }),
+      );
+    });
+
+    await user.click(screen.getByRole("button", { name: /Archive project/ }));
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith(
+        "/api/projects/project-1",
+        expect.objectContaining({ method: "DELETE" }),
+      );
+    });
+  });
+
   it("creates, updates, and tests Portkey profiles in config view", async () => {
     renderApp();
     const user = userEvent.setup();
@@ -361,7 +527,7 @@ describe("App", () => {
     await screen.findByRole("option", {
       name: "Default safety Judge (default)",
     });
-    await screen.findByRole("option", { name: "attacks.json (1 errors)" });
+    await screen.findByRole("option", { name: "Baseline scan (1 errors)" });
 
     await user.selectOptions(screen.getByLabelText("Dataset"), "dataset-1");
     await user.selectOptions(
@@ -383,12 +549,46 @@ describe("App", () => {
     expect(await screen.findByText(/Job PENDING/)).toBeInTheDocument();
   });
 
+  it("shows scan and project evaluation progress states", async () => {
+    renderApp();
+    const user = userEvent.setup();
+
+    await user.click(screen.getByTitle("Datasets"));
+
+    const progress = await screen.findByLabelText("Evaluation progress");
+    const rollup = within(progress).getByLabelText("Project evaluation rollup");
+    expect(rollup).toHaveTextContent("8 / 19 processed");
+    expect(rollup).toHaveTextContent("6 succeeded");
+    expect(rollup).toHaveTextContent("2 failed");
+    expect(rollup).toHaveTextContent("11 remaining");
+    expect(within(progress).getByText("Baseline scan")).toBeInTheDocument();
+    expect(within(progress).getByText("PENDING")).toBeInTheDocument();
+    expect(within(progress).getByText("COMPLETED")).toBeInTheDocument();
+    expect(within(progress).getByText("FAILED")).toBeInTheDocument();
+    expect(within(progress).getByText("RETRYING")).toBeInTheDocument();
+    expect(
+      within(progress).getByRole("button", { name: /Retry failed/ }),
+    ).toBeInTheDocument();
+    expect(within(progress).queryByText("Try to bypass policy")).toBeNull();
+    expect(within(progress).queryByText("pk-test-secret-value")).toBeNull();
+
+    await user.click(
+      within(progress).getByRole("button", { name: /Retry failed/ }),
+    );
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith(
+        "/api/evaluation-jobs/job-failed/retry-failed",
+        expect.objectContaining({ method: "POST" }),
+      );
+    });
+  });
+
   it("shows paginated import errors in the datasets view", async () => {
     renderApp();
     const user = userEvent.setup();
 
     await user.click(screen.getByTitle("Datasets"));
-    await screen.findByRole("option", { name: "attacks.json (1 errors)" });
+    await screen.findByRole("option", { name: "Baseline scan (1 errors)" });
     await user.selectOptions(screen.getByLabelText("Dataset"), "dataset-1");
 
     const errorMenu = await screen.findByLabelText("Import error menu");
@@ -476,8 +676,27 @@ function handleFetch(
       f1_score: 1,
     });
   }
+  if (url === "/api/projects") {
+    return jsonResponse([project]);
+  }
+  if (url === "/api/projects/project-1" && init?.method === "PUT") {
+    return jsonResponse({ ...project, name: "Customer B" });
+  }
+  if (url === "/api/projects/project-1" && init?.method === "DELETE") {
+    return jsonResponse({
+      ...project,
+      is_archived: true,
+      archived_at: "2026-06-04T00:05:00Z",
+    });
+  }
   if (url === "/api/datasets") {
     return jsonResponse([dataset]);
+  }
+  if (url === "/api/datasets?project_id=project-1") {
+    return jsonResponse([dataset]);
+  }
+  if (url === "/api/datasets/dataset-1" && init?.method === "PUT") {
+    return jsonResponse({ ...dataset, scan_name: "Retest scan" });
   }
   if (url.startsWith("/api/datasets/dataset-1/import-errors")) {
     return jsonResponse([
@@ -555,6 +774,22 @@ function handleFetch(
       completed_at: null,
     });
   }
+  if (url === "/api/evaluation-jobs/job-failed/retry-failed") {
+    return jsonResponse({
+      ...evaluationJobs[2],
+      status: "RETRYING",
+      processed_attempts: 1,
+      succeeded_attempts: 1,
+      failed_attempts: 0,
+      completed_at: null,
+    });
+  }
+  if (
+    url === "/api/evaluation-jobs" ||
+    url === "/api/evaluation-jobs?project_id=project-1"
+  ) {
+    return jsonResponse(evaluationJobs);
+  }
   if (url.startsWith("/api/results/attempts?")) {
     if (url.includes("comparison_status=EVALUATION_ERROR")) {
       return jsonResponse({
@@ -617,6 +852,8 @@ function handleFetch(
   if (url.startsWith("/api/datasets/import")) {
     return jsonResponse({
       dataset_id: "dataset-2",
+      project_id: "project-2",
+      scan_name: "attacks scan 20260604-000000",
       detected_format: "static_json",
       stream_count: 1,
       attempt_count: 1,

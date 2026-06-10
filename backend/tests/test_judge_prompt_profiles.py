@@ -50,6 +50,8 @@ def test_prompt_profile_list_creates_default_profile(client: TestClient) -> None
     body = response.json()
     assert len(body) == 1
     assert body[0]["is_default"] is True
-    assert body[0]["system_prompt"]
+    assert "response_verdict" in body[0]["system_prompt"]
+    assert "SAFE_REFUSAL" in body[0]["system_prompt"]
+    assert "evidence_excerpt" in body[0]["system_prompt"]
     assert body[0]["rubric"]
     assert len(body[0]["prompt_hash"]) == 64

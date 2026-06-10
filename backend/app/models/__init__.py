@@ -9,6 +9,7 @@ from app.models.judge_prompt_profile import JudgePromptProfile
 from app.models.judge_result import JudgeResultRecord
 from app.models.mapping_profile import MappingProfile
 from app.models.portkey_gateway_profile import PortkeyGatewayProfile
+from app.models.project import Project
 from app.models.stream import Stream
 
 __all__ = [
@@ -23,5 +24,6 @@ __all__ = [
     "JudgeResultRecord",
     "MappingProfile",
     "PortkeyGatewayProfile",
+    "Project",
     "Stream",
 ]

@@ -15,6 +15,7 @@ from app.models import (  # noqa: F401
     judge_result,
     mapping_profile,
     portkey_gateway_profile,
+    project,
     stream,
 )
 

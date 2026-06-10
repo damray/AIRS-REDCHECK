@@ -14,6 +14,8 @@ const nullableStringWithMissingDefault: z.ZodType<
 
 export const importSummarySchema = z.object({
   dataset_id: z.string(),
+  project_id: z.string(),
+  scan_name: z.string(),
   detected_format: z.string(),
   stream_count: z.number(),
   attempt_count: z.number(),
@@ -29,7 +31,9 @@ export const resetDatasetsSchema = z.object({
 
 export const datasetSchema = z.object({
   id: z.string(),
+  project_id: z.string(),
   name: nullableString,
+  scan_name: z.string(),
   source_filename: nullableString,
   source_content_type: z.string(),
   mapping_profile_id: nullableString,
@@ -53,6 +57,17 @@ export const importErrorSchema = z.object({
   message: z.string(),
   raw_payload: z.unknown().nullable(),
   created_at: z.string(),
+});
+
+export const projectSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  is_archived: z.boolean(),
+  import_count: z.number(),
+  latest_activity_at: nullableString,
+  archived_at: nullableString,
+  created_at: z.string(),
+  updated_at: z.string(),
 });
 
 export const resultAttemptSchema = z.object({
@@ -195,6 +210,7 @@ export const evaluationJobSchema = z.object({
 export type ImportSummary = z.infer<typeof importSummarySchema>;
 export type ResetDatasetsSummary = z.infer<typeof resetDatasetsSchema>;
 export type Dataset = z.infer<typeof datasetSchema>;
+export type Project = z.infer<typeof projectSchema>;
 export type ImportErrorRecord = z.infer<typeof importErrorSchema>;
 export type ResultAttempt = z.infer<typeof resultAttemptSchema>;
 export type PaginatedResults = z.infer<typeof paginatedResultsSchema>;
@@ -237,33 +253,87 @@ export type PromptProfileInput = {
   is_default: boolean;
 };
 
-export async function importDataset(file: File): Promise<ImportSummary> {
-  const params = new URLSearchParams({ filename: file.name });
+export async function importDataset(input: {
+  file: File;
+  projectId?: string;
+  projectName?: string;
+  scanName?: string;
+}): Promise<ImportSummary> {
+  const params = new URLSearchParams({ filename: input.file.name });
+  appendOptionalParam(params, "project_id", input.projectId ?? "");
+  appendOptionalParam(params, "project_name", input.projectName ?? "");
+  appendOptionalParam(params, "scan_name", input.scanName ?? "");
   const response = await fetch(
     `${API_BASE}/datasets/import?${params.toString()}`,
     {
       method: "POST",
       headers: {
-        "Content-Type": file.type || contentTypeForFile(file.name),
+        "Content-Type": input.file.type || contentTypeForFile(input.file.name),
       },
-      body: await file.text(),
+      body: await input.file.text(),
     },
   );
   return parseResponse(response, importSummarySchema);
 }
 
-export async function fetchTriageSummary(): Promise<AutomatedTriageSummary> {
-  const response = await fetch(`${API_BASE}/results/triage-summary`);
+export async function fetchProjects(): Promise<Project[]> {
+  const response = await fetch(`${API_BASE}/projects`);
+  return parseResponse(response, z.array(projectSchema));
+}
+
+export async function saveProject(input: {
+  id?: string;
+  name: string;
+}): Promise<Project> {
+  const response = await fetch(
+    input.id ? `${API_BASE}/projects/${input.id}` : `${API_BASE}/projects`,
+    {
+      method: input.id ? "PUT" : "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: input.name }),
+    },
+  );
+  return parseResponse(response, projectSchema);
+}
+
+export async function archiveProject(projectId: string): Promise<Project> {
+  const response = await fetch(`${API_BASE}/projects/${projectId}`, {
+    method: "DELETE",
+  });
+  return parseResponse(response, projectSchema);
+}
+
+export async function renameDatasetScan(input: {
+  datasetId: string;
+  scanName: string;
+}): Promise<Dataset> {
+  const response = await fetch(`${API_BASE}/datasets/${input.datasetId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ scan_name: input.scanName }),
+  });
+  return parseResponse(response, datasetSchema);
+}
+
+export async function fetchTriageSummary(
+  projectId?: string,
+): Promise<AutomatedTriageSummary> {
+  const query = projectQuery(projectId);
+  const response = await fetch(`${API_BASE}/results/triage-summary${query}`);
   return parseResponse(response, triageSummarySchema);
 }
 
-export async function fetchReviewedQuality(): Promise<ReviewedQualityMetrics> {
-  const response = await fetch(`${API_BASE}/results/reviewed-quality`);
+export async function fetchReviewedQuality(
+  projectId?: string,
+): Promise<ReviewedQualityMetrics> {
+  const query = projectQuery(projectId);
+  const response = await fetch(`${API_BASE}/results/reviewed-quality${query}`);
   return parseResponse(response, reviewedQualitySchema);
 }
 
-export async function fetchDatasets(): Promise<Dataset[]> {
-  const response = await fetch(`${API_BASE}/datasets`);
+export async function fetchDatasets(projectId?: string): Promise<Dataset[]> {
+  const query = projectQuery(projectId);
+  const response = await fetch(`${API_BASE}/datasets${query}`);
   return parseResponse(response, z.array(datasetSchema));
 }
 
@@ -274,6 +344,7 @@ export async function resetImportedDatasets(): Promise<ResetDatasetsSummary> {
 
 export async function fetchImportErrors(
   datasetId: string,
+  projectId?: string,
   offset = 0,
   limit = 25,
 ): Promise<ImportErrorRecord[]> {
@@ -281,6 +352,7 @@ export async function fetchImportErrors(
     limit: String(limit),
     offset: String(offset),
   });
+  appendOptionalParam(params, "project_id", projectId ?? "");
   const response = await fetch(
     `${API_BASE}/datasets/${datasetId}/import-errors?${params.toString()}`,
   );
@@ -369,6 +441,26 @@ export async function createEvaluationJob(input: {
   return parseResponse(response, evaluationJobSchema);
 }
 
+export async function fetchEvaluationJobs(
+  projectId?: string,
+): Promise<EvaluationJob[]> {
+  const query = projectQuery(projectId);
+  const response = await fetch(`${API_BASE}/evaluation-jobs${query}`);
+  return parseResponse(response, z.array(evaluationJobSchema));
+}
+
+export async function retryFailedEvaluationJob(
+  jobId: string,
+): Promise<EvaluationJob> {
+  const response = await fetch(
+    `${API_BASE}/evaluation-jobs/${jobId}/retry-failed`,
+    {
+      method: "POST",
+    },
+  );
+  return parseResponse(response, evaluationJobSchema);
+}
+
 export async function fetchDisagreements(): Promise<PaginatedResults> {
   return fetchResults(defaultDisagreementFilters());
 }
@@ -377,8 +469,10 @@ export async function fetchResults(
   filters: ResultFilters,
   offset = 0,
   limit = RESULTS_PAGE_SIZE,
+  projectId?: string,
 ): Promise<PaginatedResults> {
   const params = resultFilterParams(filters);
+  appendOptionalParam(params, "project_id", projectId ?? "");
   params.set("limit", String(limit));
   params.set("offset", String(offset));
   const response = await fetch(
@@ -387,8 +481,12 @@ export async function fetchResults(
   return parseResponse(response, paginatedResultsSchema);
 }
 
-export function filteredExportUrl(filters: ResultFilters): string {
+export function filteredExportUrl(
+  filters: ResultFilters,
+  projectId?: string,
+): string {
   const params = resultFilterParams(filters);
+  appendOptionalParam(params, "project_id", projectId ?? "");
   const query = params.toString();
   return `/api/results/export/current.csv${query.length > 0 ? `?${query}` : ""}`;
 }
@@ -409,17 +507,25 @@ export function defaultDisagreementFilters(): ResultFilters {
   };
 }
 
-export async function fetchTimeline(streamId: string): Promise<StreamTimeline> {
+export async function fetchTimeline(
+  streamId: string,
+  projectId?: string,
+): Promise<StreamTimeline> {
+  const query = projectQuery(projectId);
   const response = await fetch(
-    `${API_BASE}/results/streams/${streamId}/timeline`,
+    `${API_BASE}/results/streams/${streamId}/timeline${query}`,
   );
   return parseResponse(response, timelineSchema);
 }
 
 export async function fetchAttemptDetail(
   attemptId: string,
+  projectId?: string,
 ): Promise<ResultAttempt> {
-  const response = await fetch(`${API_BASE}/results/attempts/${attemptId}`);
+  const query = projectQuery(projectId);
+  const response = await fetch(
+    `${API_BASE}/results/attempts/${attemptId}${query}`,
+  );
   return parseResponse(response, resultAttemptSchema);
 }
 
@@ -494,4 +600,11 @@ function appendOptionalParam(
   if (trimmed.length > 0) {
     params.set(key, trimmed);
   }
+}
+
+function projectQuery(projectId?: string): string {
+  const params = new URLSearchParams();
+  appendOptionalParam(params, "project_id", projectId ?? "");
+  const query = params.toString();
+  return query.length > 0 ? `?${query}` : "";
 }

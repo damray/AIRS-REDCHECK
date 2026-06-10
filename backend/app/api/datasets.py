@@ -17,10 +17,11 @@ from app.models import (
     HumanReview,
     ImportErrorRecord,
     JudgeResultRecord,
+    Project,
     Stream,
 )
 from app.parsers.flat_mapping import FlatMappingConfig
-from app.schemas.dataset import AttemptRead, DatasetRead, StreamRead
+from app.schemas.dataset import AttemptRead, DatasetRead, DatasetUpdate, StreamRead
 from app.schemas.import_error import ImportErrorRead
 from app.schemas.import_summary import ImportSummary
 from app.services.import_service import ImportRequest, ImportService, ImportServiceError
@@ -43,6 +44,7 @@ def reset_imported_datasets(db: Annotated[Session, Depends(get_db)]) -> dict[str
         Attempt,
         Stream,
         Dataset,
+        Project,
     ):
         db.execute(delete(model))
     db.commit()
@@ -53,15 +55,19 @@ def reset_imported_datasets(db: Annotated[Session, Depends(get_db)]) -> dict[str
 @router.get("", response_model=list[DatasetRead])
 def list_datasets(
     db: Annotated[Session, Depends(get_db)],
+    project_id: Annotated[str | None, Query()] = None,
+    include_archived: Annotated[bool, Query()] = False,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[Dataset]:
+    statement = select(Dataset).join(Project, Project.id == Dataset.project_id)
+    if project_id is not None:
+        statement = statement.where(Dataset.project_id == project_id)
+    if not include_archived:
+        statement = statement.where(Project.is_archived.is_(False))
     return list(
         db.execute(
-            select(Dataset)
-            .order_by(Dataset.created_at.desc(), Dataset.id)
-            .limit(limit)
-            .offset(offset)
+            statement.order_by(Dataset.created_at.desc(), Dataset.id).limit(limit).offset(offset)
         ).scalars()
     )
 
@@ -72,7 +78,10 @@ async def import_dataset(
     db: Annotated[Session, Depends(get_db)],
     content_type: Annotated[str, Header(alias="Content-Type")] = "application/json",
     name: Annotated[str | None, Query()] = None,
+    scan_name: Annotated[str | None, Query()] = None,
     filename: Annotated[str | None, Query()] = None,
+    project_id: Annotated[str | None, Query()] = None,
+    project_name: Annotated[str | None, Query()] = None,
     mapping_profile_id: Annotated[str | None, Query()] = None,
     prompt_column: Annotated[str | None, Query()] = None,
     output_column: Annotated[str | None, Query()] = None,
@@ -99,7 +108,10 @@ async def import_dataset(
                 content=content,
                 content_type=content_type,
                 name=name,
+                scan_name=scan_name,
                 filename=filename,
+                project_id=project_id,
+                project_name=project_name,
                 mapping_profile_id=mapping_profile_id,
                 flat_mapping=flat_mapping,
             )
@@ -109,6 +121,8 @@ async def import_dataset(
 
     return ImportSummary(
         dataset_id=dataset.id,
+        project_id=dataset.project_id,
+        scan_name=dataset.scan_name,
         detected_format=dataset.detected_format,
         stream_count=dataset.stream_count,
         attempt_count=dataset.attempt_count,
@@ -123,6 +137,21 @@ def get_dataset(dataset_id: str, db: Annotated[Session, Depends(get_db)]) -> Dat
     dataset = db.get(Dataset, dataset_id)
     if dataset is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dataset not found.")
+    return dataset
+
+
+@router.put("/{dataset_id}", response_model=DatasetRead)
+def rename_dataset_scan(
+    dataset_id: str,
+    payload: DatasetUpdate,
+    db: Annotated[Session, Depends(get_db)],
+) -> Dataset:
+    dataset = db.get(Dataset, dataset_id)
+    if dataset is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dataset not found.")
+    dataset.scan_name = payload.scan_name.strip()
+    db.commit()
+    db.refresh(dataset)
     return dataset
 
 
@@ -168,10 +197,11 @@ def list_attempts(
 def list_import_errors(
     dataset_id: str,
     db: Annotated[Session, Depends(get_db)],
+    project_id: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[ImportErrorRecord]:
-    _ensure_dataset(db, dataset_id)
+    _ensure_dataset(db, dataset_id, project_id=project_id)
     return list(
         db.execute(
             select(ImportErrorRecord)
@@ -183,8 +213,11 @@ def list_import_errors(
     )
 
 
-def _ensure_dataset(db: Session, dataset_id: str) -> None:
-    if db.get(Dataset, dataset_id) is None:
+def _ensure_dataset(db: Session, dataset_id: str, project_id: str | None = None) -> None:
+    dataset = db.get(Dataset, dataset_id)
+    if dataset is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dataset not found.")
+    if project_id is not None and dataset.project_id != project_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dataset not found.")
 
 

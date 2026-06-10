@@ -9,7 +9,15 @@ from sqlalchemy import Select, String, cast, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.models import Attempt, EvaluationError, HumanReview, JudgeResultRecord, Stream
+from app.models import (
+    Attempt,
+    Dataset,
+    EvaluationError,
+    HumanReview,
+    JudgeResultRecord,
+    Project,
+    Stream,
+)
 from app.schemas.human_review import HumanReviewCreate, HumanReviewRead, ReviewedQualityMetrics
 from app.schemas.result_explorer import (
     AutomatedTriageSummary,
@@ -46,6 +54,7 @@ EXPORT_COLUMNS = [
 @router.get("/attempts", response_model=PaginatedResults)
 def list_result_attempts(
     db: Annotated[Session, Depends(get_db)],
+    project_id: Annotated[str | None, Query()] = None,
     comparison_status: Annotated[list[str] | None, Query()] = None,
     source_verdict: Annotated[str | None, Query()] = None,
     judge_verdict: Annotated[str | None, Query()] = None,
@@ -74,6 +83,7 @@ def list_result_attempts(
         source_prompt_contains=source_prompt_contains,
         source_output_contains=source_output_contains,
         q=q,
+        project_id=project_id,
     )
     total = db.execute(select(func.count()).select_from(statement.subquery())).scalar_one()
     rows = db.execute(
@@ -89,15 +99,21 @@ def list_result_attempts(
 
 
 @router.get("/export/normalized.csv")
-def export_normalized_results(db: Annotated[Session, Depends(get_db)]) -> Response:
+def export_normalized_results(
+    db: Annotated[Session, Depends(get_db)],
+    project_id: Annotated[str | None, Query()] = None,
+) -> Response:
     return _csv_export_response(
         filename="airs-redcheck-normalized-results.csv",
-        rows=_export_rows(db, _base_statement()),
+        rows=_export_rows(db, _base_statement(project_id=project_id)),
     )
 
 
 @router.get("/export/disagreements.csv")
-def export_disagreements(db: Annotated[Session, Depends(get_db)]) -> Response:
+def export_disagreements(
+    db: Annotated[Session, Depends(get_db)],
+    project_id: Annotated[str | None, Query()] = None,
+) -> Response:
     statement = _filtered_statement(
         comparison_status=[
             "SOURCE_STRICTER_THAN_JUDGE",
@@ -115,6 +131,7 @@ def export_disagreements(db: Annotated[Session, Depends(get_db)]) -> Response:
         source_prompt_contains=None,
         source_output_contains=None,
         q=None,
+        project_id=project_id,
     )
     return _csv_export_response(
         filename="airs-redcheck-disagreements.csv",
@@ -123,7 +140,10 @@ def export_disagreements(db: Annotated[Session, Depends(get_db)]) -> Response:
 
 
 @router.get("/export/reviewed.csv")
-def export_reviewed_cases(db: Annotated[Session, Depends(get_db)]) -> Response:
+def export_reviewed_cases(
+    db: Annotated[Session, Depends(get_db)],
+    project_id: Annotated[str | None, Query()] = None,
+) -> Response:
     statement = _filtered_statement(
         comparison_status=None,
         source_verdict=None,
@@ -137,6 +157,7 @@ def export_reviewed_cases(db: Annotated[Session, Depends(get_db)]) -> Response:
         source_prompt_contains=None,
         source_output_contains=None,
         q=None,
+        project_id=project_id,
     )
     return _csv_export_response(
         filename="airs-redcheck-reviewed-cases.csv",
@@ -147,6 +168,7 @@ def export_reviewed_cases(db: Annotated[Session, Depends(get_db)]) -> Response:
 @router.get("/export/current.csv")
 def export_filtered_results(
     db: Annotated[Session, Depends(get_db)],
+    project_id: Annotated[str | None, Query()] = None,
     comparison_status: Annotated[list[str] | None, Query()] = None,
     source_verdict: Annotated[str | None, Query()] = None,
     judge_verdict: Annotated[str | None, Query()] = None,
@@ -173,6 +195,7 @@ def export_filtered_results(
         source_prompt_contains=source_prompt_contains,
         source_output_contains=source_output_contains,
         q=q,
+        project_id=project_id,
     )
     return _csv_export_response(
         filename="airs-redcheck-filtered-results.csv",
@@ -184,12 +207,22 @@ def export_filtered_results(
 def get_stream_timeline(
     stream_id: str,
     db: Annotated[Session, Depends(get_db)],
+    project_id: Annotated[str | None, Query()] = None,
 ) -> StreamTimelineRead:
-    stream = db.get(Stream, stream_id)
+    stream = db.scalar(
+        select(Stream)
+        .join(Dataset, Dataset.id == Stream.dataset_id)
+        .join(Project, Project.id == Dataset.project_id)
+        .where(
+            Stream.id == stream_id,
+            Project.is_archived.is_(False),
+            *([Dataset.project_id == project_id] if project_id is not None else []),
+        )
+    )
     if stream is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Stream not found.")
 
-    statement = _base_statement().where(Attempt.stream_id == stream_id)
+    statement = _base_statement(project_id=project_id).where(Attempt.stream_id == stream_id)
     rows = db.execute(
         statement.order_by(Attempt.attempt_index, Attempt.created_at, Attempt.id)
     ).all()
@@ -206,8 +239,9 @@ def get_stream_timeline(
 def get_result_attempt_detail(
     attempt_id: str,
     db: Annotated[Session, Depends(get_db)],
+    project_id: Annotated[str | None, Query()] = None,
 ) -> ResultAttemptRead:
-    row = db.execute(_base_statement().where(Attempt.id == attempt_id)).first()
+    row = db.execute(_base_statement(project_id=project_id).where(Attempt.id == attempt_id)).first()
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attempt not found.")
     return _row_to_result(*row, full_text=True)
@@ -263,11 +297,17 @@ def get_attempt_review(
 @router.get("/reviewed-quality", response_model=ReviewedQualityMetrics)
 def get_reviewed_quality_metrics(
     db: Annotated[Session, Depends(get_db)],
+    project_id: Annotated[str | None, Query()] = None,
 ) -> ReviewedQualityMetrics:
+    base_attempt_ids = _active_attempt_ids_statement(project_id)
     rows = db.execute(
-        select(Attempt, HumanReview).join(HumanReview, HumanReview.attempt_id == Attempt.id)
+        select(Attempt, HumanReview)
+        .join(HumanReview, HumanReview.attempt_id == Attempt.id)
+        .where(Attempt.id.in_(base_attempt_ids))
     ).all()
-    total_attempts = db.execute(select(func.count()).select_from(Attempt)).scalar_one()
+    total_attempts = db.execute(
+        select(func.count()).select_from(Attempt).where(Attempt.id.in_(base_attempt_ids))
+    ).scalar_one()
 
     counts = {"tp": 0, "tn": 0, "fp": 0, "fn": 0}
     ambiguous_cases = 0
@@ -321,32 +361,59 @@ def get_reviewed_quality_metrics(
 @router.get("/triage-summary", response_model=AutomatedTriageSummary)
 def get_automated_triage_summary(
     db: Annotated[Session, Depends(get_db)],
+    project_id: Annotated[str | None, Query()] = None,
 ) -> AutomatedTriageSummary:
-    total_streams = db.execute(select(func.count()).select_from(Stream)).scalar_one()
-    total_attempts = db.execute(select(func.count()).select_from(Attempt)).scalar_one()
+    active_stream_ids = _active_stream_ids_statement(project_id)
+    active_attempt_ids = _active_attempt_ids_statement(project_id)
+    total_streams = db.execute(
+        select(func.count()).select_from(Stream).where(Stream.id.in_(active_stream_ids))
+    ).scalar_one()
+    total_attempts = db.execute(
+        select(func.count()).select_from(Attempt).where(Attempt.id.in_(active_attempt_ids))
+    ).scalar_one()
     judge_statuses = list(
         db.execute(
             select(JudgeResultRecord.comparison_status).where(
-                JudgeResultRecord.comparison_status.is_not(None)
+                JudgeResultRecord.comparison_status.is_not(None),
+                JudgeResultRecord.attempt_id.in_(active_attempt_ids),
             )
         ).scalars()
     )
-    error_count = db.execute(select(func.count()).select_from(EvaluationError)).scalar_one()
+    error_count = db.execute(
+        select(func.count())
+        .select_from(EvaluationError)
+        .where(EvaluationError.attempt_id.in_(active_attempt_ids))
+    ).scalar_one()
     error_statuses = list(
         db.execute(
             select(EvaluationError.comparison_status).where(
-                EvaluationError.comparison_status.is_not(None)
+                EvaluationError.comparison_status.is_not(None),
+                EvaluationError.attempt_id.in_(active_attempt_ids),
             )
         ).scalars()
     )
     processed_attempt_ids = set(
-        db.execute(select(JudgeResultRecord.attempt_id).distinct()).scalars()
-    ) | set(db.execute(select(EvaluationError.attempt_id).distinct()).scalars())
+        db.execute(
+            select(JudgeResultRecord.attempt_id)
+            .where(JudgeResultRecord.attempt_id.in_(active_attempt_ids))
+            .distinct()
+        ).scalars()
+    ) | set(
+        db.execute(
+            select(EvaluationError.attempt_id)
+            .where(EvaluationError.attempt_id.in_(active_attempt_ids))
+            .distinct()
+        ).scalars()
+    )
     agent_streams = db.execute(
-        select(func.count()).select_from(Stream).where(Stream.input_type == "agent")
+        select(func.count())
+        .select_from(Stream)
+        .where(Stream.input_type == "agent", Stream.id.in_(active_stream_ids))
     ).scalar_one()
     static_streams = db.execute(
-        select(func.count()).select_from(Stream).where(Stream.input_type == "static")
+        select(func.count())
+        .select_from(Stream)
+        .where(Stream.input_type == "static", Stream.id.in_(active_stream_ids))
     ).scalar_one()
     statuses = judge_statuses + error_statuses
     agreement_count = statuses.count("AGREEMENT_THREAT") + statuses.count("AGREEMENT_SAFE")
@@ -372,14 +439,20 @@ def get_automated_triage_summary(
     )
 
 
-def _base_statement() -> Select[Any]:
-    return (
+def _base_statement(project_id: str | None = None) -> Select[Any]:
+    statement = (
         select(Attempt, Stream, JudgeResultRecord, EvaluationError, HumanReview)
         .join(Stream, Stream.id == Attempt.stream_id)
+        .join(Dataset, Dataset.id == Attempt.dataset_id)
+        .join(Project, Project.id == Dataset.project_id)
         .outerjoin(JudgeResultRecord, JudgeResultRecord.attempt_id == Attempt.id)
         .outerjoin(EvaluationError, EvaluationError.attempt_id == Attempt.id)
         .outerjoin(HumanReview, HumanReview.attempt_id == Attempt.id)
+        .where(Project.is_archived.is_(False))
     )
+    if project_id is not None:
+        statement = statement.where(Dataset.project_id == project_id)
+    return statement
 
 
 def _filtered_statement(
@@ -396,8 +469,9 @@ def _filtered_statement(
     source_prompt_contains: str | None,
     source_output_contains: str | None,
     q: str | None,
+    project_id: str | None,
 ) -> Select[Any]:
-    statement = _base_statement()
+    statement = _base_statement(project_id=project_id)
     if comparison_status:
         statement = statement.where(
             or_(
@@ -445,6 +519,30 @@ def _filtered_statement(
                 Attempt.source_output.ilike(pattern, escape="\\"),
             )
         )
+    return statement
+
+
+def _active_attempt_ids_statement(project_id: str | None) -> Select[tuple[str]]:
+    statement = (
+        select(Attempt.id)
+        .join(Dataset, Dataset.id == Attempt.dataset_id)
+        .join(Project, Project.id == Dataset.project_id)
+        .where(Project.is_archived.is_(False))
+    )
+    if project_id is not None:
+        statement = statement.where(Dataset.project_id == project_id)
+    return statement
+
+
+def _active_stream_ids_statement(project_id: str | None) -> Select[tuple[str]]:
+    statement = (
+        select(Stream.id)
+        .join(Dataset, Dataset.id == Stream.dataset_id)
+        .join(Project, Project.id == Dataset.project_id)
+        .where(Project.is_archived.is_(False))
+    )
+    if project_id is not None:
+        statement = statement.where(Dataset.project_id == project_id)
     return statement
 
 

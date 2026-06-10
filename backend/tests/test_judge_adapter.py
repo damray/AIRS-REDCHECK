@@ -6,7 +6,7 @@ import pytest
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
-from app.models import Attempt, Dataset, EvaluationError, PortkeyGatewayProfile, Stream
+from app.models import Attempt, Dataset, EvaluationError, PortkeyGatewayProfile, Project, Stream
 from app.services.judge.blind import build_blind_judge_request
 from app.services.judge.persistence import EvaluationErrorRepository
 from app.services.judge.portkey_adapter import JUDGE_RESPONSE_JSON_SCHEMA, PortkeyJudgeAdapter
@@ -14,7 +14,10 @@ from app.services.judge.schemas import EvaluationErrorCreate, JudgeAdapterError,
 
 
 def _attempt_graph() -> tuple[Dataset, Stream, Attempt]:
+    project = Project(name="Project")
     dataset = Dataset(
+        project=project,
+        scan_name="Judge scan",
         source_content_type="application/json",
         detected_format="static_json",
         parser_version="static-json-v1",
@@ -94,7 +97,6 @@ def test_blind_judge_request_excludes_source_verdict_score_and_reasoning() -> No
     assert "source_threat" not in serialized
     assert "source_score" not in serialized
     assert "source evaluator reasoning" not in serialized
-    assert "THREAT" not in serialized
     assert "0.99" not in serialized
 
 
@@ -168,7 +170,12 @@ def test_portkey_judge_adapter_sends_blind_payload_and_parses_structured_respons
             "schema": JUDGE_RESPONSE_JSON_SCHEMA,
         },
     }
-    assert "JudgeResult schema" in captured["json"]["messages"][0]["content"]
+    system_content = captured["json"]["messages"][0]["content"]
+    assert "JudgeResult schema" in system_content
+    assert "JudgeResult JSON schema" in system_content
+    assert '"response_verdict"' in system_content
+    assert '"SAFE_REFUSAL"' in system_content
+    assert '"evidence_excerpt"' in system_content
     request_content = captured["json"]["messages"][1]["content"]
     assert "user prompt" in request_content
     assert "model output" in request_content

@@ -1,10 +1,11 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.models import EvaluationJob
+from app.models import Dataset, EvaluationJob, Project
 from app.schemas.evaluation_job import (
     EvaluationJobCreate,
     EvaluationJobRead,
@@ -14,6 +15,32 @@ from app.schemas.evaluation_job import (
 from app.services.evaluation_jobs import EvaluationJobService, EvaluationJobServiceError
 
 router = APIRouter(prefix="/evaluation-jobs", tags=["evaluation-jobs"])
+
+
+@router.get("", response_model=list[EvaluationJobRead])
+def list_evaluation_jobs(
+    db: Annotated[Session, Depends(get_db)],
+    project_id: Annotated[str | None, Query()] = None,
+    include_archived: Annotated[bool, Query()] = False,
+    limit: Annotated[int, Query(ge=1, le=500)] = 100,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> list[EvaluationJob]:
+    statement = (
+        select(EvaluationJob)
+        .join(Dataset, Dataset.id == EvaluationJob.dataset_id)
+        .join(Project, Project.id == Dataset.project_id)
+    )
+    if project_id is not None:
+        statement = statement.where(Dataset.project_id == project_id)
+    if not include_archived:
+        statement = statement.where(Project.is_archived.is_(False))
+    return list(
+        db.execute(
+            statement.order_by(EvaluationJob.created_at.desc(), EvaluationJob.id)
+            .limit(limit)
+            .offset(offset)
+        ).scalars()
+    )
 
 
 @router.post("", response_model=EvaluationJobRead, status_code=status.HTTP_201_CREATED)

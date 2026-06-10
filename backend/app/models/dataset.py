@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from app.models.human_review import HumanReview
     from app.models.import_error import ImportErrorRecord
     from app.models.mapping_profile import MappingProfile
+    from app.models.project import Project
     from app.models.stream import Stream
 
 
@@ -22,7 +23,9 @@ class Dataset(Base):
     __tablename__ = "datasets"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), index=True)
     name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    scan_name: Mapped[str] = mapped_column(String(255), nullable=False)
     source_filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
     source_content_type: Mapped[str] = mapped_column(String(100))
     mapping_profile_id: Mapped[str | None] = mapped_column(
@@ -40,6 +43,7 @@ class Dataset(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
+    project: Mapped["Project"] = relationship(back_populates="datasets")
     streams: Mapped[list["Stream"]] = relationship(
         back_populates="dataset", cascade="all, delete-orphan"
     )

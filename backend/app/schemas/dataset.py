@@ -1,13 +1,19 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class DatasetUpdate(BaseModel):
+    scan_name: str = Field(min_length=1, max_length=255)
 
 
 class DatasetRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
+    project_id: str
     name: str | None
+    scan_name: str
     source_filename: str | None
     source_content_type: str
     mapping_profile_id: str | None

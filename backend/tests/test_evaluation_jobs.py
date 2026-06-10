@@ -13,6 +13,7 @@ from app.models import (
     JudgePromptProfile,
     JudgeResultRecord,
     PortkeyGatewayProfile,
+    Project,
     Stream,
 )
 from app.services.evaluation_jobs import EvaluationJobService
@@ -116,7 +117,10 @@ class NulErrorAdapter:
 def _dataset_graph(
     db_session: Session, attempt_count: int = 2
 ) -> tuple[Dataset, PortkeyGatewayProfile]:
+    project = Project(name="Project")
     dataset = Dataset(
+        project=project,
+        scan_name="Evaluation scan",
         source_content_type="application/json",
         detected_format="static_json",
         parser_version="static-json-v1",
@@ -208,6 +212,27 @@ def test_create_evaluation_job_persists_pending_rows_before_execution(
     assert [attempt.status for attempt in job.job_attempts] == ["PENDING", "PENDING"]
 
 
+def test_create_evaluation_job_rejects_archived_project(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    dataset, profile = _dataset_graph(db_session)
+    dataset.project.is_archived = True
+    db_session.commit()
+
+    response = client.post(
+        "/evaluation-jobs",
+        json={
+            "dataset_id": dataset.id,
+            "portkey_gateway_profile_id": profile.id,
+            "retry_limit": 2,
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Project not found."
+
+
 def test_create_evaluation_job_persists_prompt_and_model_configuration_snapshot(
     client: TestClient,
     db_session: Session,
@@ -257,6 +282,37 @@ def test_status_endpoint_reports_progress(client: TestClient, db_session: Sessio
     assert body["processed_attempts"] == 1
     assert body["succeeded_attempts"] == 1
     assert body["job_attempts"][0]["status"] == "COMPLETED"
+
+
+def test_list_evaluation_jobs_reports_safe_progress_by_project(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    first_dataset, first_profile = _dataset_graph(db_session, attempt_count=1)
+    second_dataset, second_profile = _dataset_graph(db_session, attempt_count=2)
+    first_job = EvaluationJobService(db_session).create_job(
+        first_dataset.id, first_profile.id, retry_limit=1
+    )
+    second_job = EvaluationJobService(db_session).create_job(
+        second_dataset.id, second_profile.id, retry_limit=1
+    )
+    first_job.job_attempts[0].status = "COMPLETED"
+    EvaluationJobService(db_session).recalculate_progress(first_job)
+    db_session.commit()
+
+    response = client.get(f"/evaluation-jobs?project_id={first_dataset.project_id}")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert [job["id"] for job in body] == [first_job.id]
+    assert body[0]["status"] == "COMPLETED"
+    assert body[0]["processed_attempts"] == 1
+    assert body[0]["succeeded_attempts"] == 1
+    assert "job_attempts" not in body[0]
+    assert "judge_system_prompt" not in body[0]
+    assert "judge_rubric" not in body[0]
+    assert "pk-test-secret-value" not in response.text
+    assert second_job.id not in response.text
 
 
 def test_worker_processes_pending_job_and_records_result(db_session: Session) -> None:

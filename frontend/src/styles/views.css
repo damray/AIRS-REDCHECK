@@ -251,6 +251,140 @@
   color: var(--ink-2);
 }
 
+/* evaluation progress */
+.evaluation-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.progress-summary {
+  display: grid;
+  grid-template-columns: minmax(180px, 240px) 1fr minmax(260px, auto);
+  align-items: center;
+  gap: 14px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+}
+.progress-label {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--ink-faint);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+.progress-counts {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  color: var(--ink-3);
+  font-size: 12px;
+}
+.progress-bar {
+  height: 8px;
+  border-radius: 99px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+.progress-bar > span {
+  display: block;
+  height: 100%;
+  min-width: 0;
+  border-radius: 99px;
+}
+.progress-bar.active > span {
+  background: var(--accent);
+}
+.progress-bar.completed > span {
+  background: var(--safe);
+}
+.progress-bar.failed > span {
+  background: var(--error);
+}
+.progress-bar.empty > span {
+  background: var(--ink-faint);
+}
+.scan-progress-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.scan-progress {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+}
+.scan-progress-head,
+.job-progress-main,
+.job-progress-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.scan-progress-head {
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.job-progress {
+  display: grid;
+  grid-template-columns: minmax(320px, 1fr) minmax(160px, 260px) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+.job-progress-main {
+  color: var(--ink-3);
+  font-size: 12px;
+}
+.job-progress-foot {
+  justify-content: flex-end;
+}
+.job-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  font-size: 11px;
+  font-weight: 700;
+}
+.job-status.pending,
+.job-status.running {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+}
+.job-status.retrying {
+  color: var(--uncertain);
+  background: var(--uncertain-bg);
+  border-color: var(--uncertain-line);
+}
+.job-status.completed {
+  color: var(--safe);
+  background: color-mix(in srgb, var(--safe) 10%, transparent);
+  border-color: color-mix(in srgb, var(--safe) 35%, var(--border));
+}
+.job-status.failed {
+  color: var(--error);
+  background: color-mix(in srgb, var(--error) 10%, transparent);
+  border-color: color-mix(in srgb, var(--error) 35%, var(--border));
+}
+@media (max-width: 1100px) {
+  .progress-summary,
+  .job-progress {
+    grid-template-columns: 1fr;
+  }
+  .progress-counts,
+  .job-progress-foot {
+    justify-content: flex-start;
+  }
+}
+
 /* review */
 .review-layout {
   display: grid;

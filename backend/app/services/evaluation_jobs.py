@@ -5,10 +5,12 @@ from sqlalchemy.orm import Session
 
 from app.models import (
     Attempt,
+    Dataset,
     EvaluationJob,
     EvaluationJobAttempt,
     JudgePromptProfile,
     PortkeyGatewayProfile,
+    Project,
 )
 from app.services.judge.prompt_profiles import ensure_default_prompt_profile
 
@@ -41,6 +43,13 @@ class EvaluationJobService:
         )
         if prompt_profile is None:
             raise EvaluationJobServiceError("Judge prompt profile not found.")
+
+        dataset = self.session.get(Dataset, dataset_id)
+        if dataset is None:
+            raise EvaluationJobServiceError("Dataset not found.")
+        project = self.session.get(Project, dataset.project_id)
+        if project is None or project.is_archived:
+            raise EvaluationJobServiceError("Project not found.")
 
         attempts_query = select(Attempt).where(Attempt.dataset_id == dataset_id)
         if attempt_ids is not None:

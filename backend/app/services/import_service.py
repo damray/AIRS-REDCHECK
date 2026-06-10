@@ -1,11 +1,12 @@
 import json
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
-from app.models import Attempt, Dataset, ImportErrorRecord, MappingProfile, Stream
+from app.models import Attempt, Dataset, ImportErrorRecord, MappingProfile, Project, Stream
 from app.parsers.csv_loader import load_csv_payload
 from app.parsers.detection import detect_parser
 from app.parsers.flat_mapping import FlatMappingConfig, FlatMappingParser
@@ -17,7 +18,10 @@ class ImportRequest:
     content: bytes
     content_type: str
     name: str | None = None
+    scan_name: str | None = None
     filename: str | None = None
+    project_id: str | None = None
+    project_name: str | None = None
     mapping_profile_id: str | None = None
     flat_mapping: FlatMappingConfig | None = None
 
@@ -48,8 +52,12 @@ class ImportService:
             detected_format = result.detected_format
 
         status = self._status(stream_count=len(result.streams), error_count=len(result.errors))
+        project = self._resolve_project(request)
+        scan_name = self._resolve_scan_name(request)
         dataset = Dataset(
+            project_id=project.id,
             name=request.name,
+            scan_name=scan_name,
             source_filename=request.filename,
             source_content_type=request.content_type,
             mapping_profile_id=request.mapping_profile_id,
@@ -122,6 +130,29 @@ class ImportService:
         self.session.refresh(dataset)
         return dataset
 
+    def _resolve_project(self, request: ImportRequest) -> Project:
+        if request.project_id is not None and request.project_name is not None:
+            raise ImportServiceError("Use either project_id or project_name, not both.")
+        if request.project_id is not None:
+            project = self.session.get(Project, request.project_id)
+            if project is None or project.is_archived:
+                raise ImportServiceError("Project not found.")
+            return project
+
+        name = self._clean_name(request.project_name)
+        if name is None:
+            name = self._default_project_name(request.filename)
+        project = Project(name=name)
+        self.session.add(project)
+        self.session.flush()
+        return project
+
+    def _resolve_scan_name(self, request: ImportRequest) -> str:
+        name = self._clean_name(request.scan_name)
+        if name is not None:
+            return name
+        return self._default_scan_name(request.filename)
+
     def _load_payload(self, content: bytes, content_type: str) -> Any:
         normalized_content_type = content_type.split(";")[0].strip().lower()
         if normalized_content_type in {"application/json", "application/octet-stream"}:
@@ -174,3 +205,28 @@ class ImportService:
         if normalized_content_type in {"text/csv", "application/csv"}:
             return "flat_mapping_csv"
         return "flat_mapping_json"
+
+    def _clean_name(self, value: str | None) -> str | None:
+        sanitized = sanitize_text_for_postgres(value)
+        cleaned = sanitized.strip() if sanitized is not None else ""
+        return cleaned or None
+
+    def _default_project_name(self, filename: str | None) -> str:
+        stem = self._filename_stem(filename)
+        return f"{stem} project {self._timestamp_suffix()}"
+
+    def _default_scan_name(self, filename: str | None) -> str:
+        stem = self._filename_stem(filename)
+        return f"{stem} scan {self._timestamp_suffix()}"
+
+    def _filename_stem(self, filename: str | None) -> str:
+        cleaned = self._clean_name(filename)
+        if cleaned is None:
+            return "Untitled"
+        stem = cleaned.rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
+        if "." in stem:
+            stem = stem.rsplit(".", 1)[0]
+        return stem or "Untitled"
+
+    def _timestamp_suffix(self) -> str:
+        return datetime.now(UTC).strftime("%Y%m%d-%H%M%S")

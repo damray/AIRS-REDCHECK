@@ -1,11 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
-import {
-  defaultDisagreementFilters,
-  fetchResults,
-  resetImportedDatasets,
-} from "./api";
+import { defaultDisagreementFilters, fetchProjects, fetchResults } from "./api";
 import { Icon } from "./components/Icon";
 import { ConfigView } from "./views/ConfigView";
 import { DatasetsView } from "./views/DatasetsView";
@@ -48,14 +44,22 @@ export function App() {
   const [dark, setDark] = useState(false);
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [reviewer, setReviewer] = useState("analyst");
+  const [selectedProjectId, setSelectedProjectId] = useState("");
   const [reviewFilter, setReviewFilter] = useState<string[]>(
     defaultDisagreementFilters().comparisonStatus,
   );
+
+  const projectsQuery = useQuery({
+    queryKey: ["projects"],
+    queryFn: fetchProjects,
+  });
+  const projects = projectsQuery.data ?? [];
 
   const pendingQuery = useQuery({
     queryKey: [
       "results",
       {
+        projectId: selectedProjectId,
         comparisonStatus: [
           "SOURCE_STRICTER_THAN_JUDGE",
           "JUDGE_STRICTER_THAN_SOURCE",
@@ -78,6 +82,7 @@ export function App() {
         },
         0,
         1,
+        selectedProjectId || undefined,
       ),
   });
   const pendingCount = pendingQuery.data?.total ?? 0;
@@ -155,6 +160,19 @@ export function App() {
           <header className="topbar">
             <h1>{CRUMB[view]}</h1>
             <span className="topbar-spacer" />
+            <select
+              aria-label="Project workspace"
+              className="topbar-select"
+              value={selectedProjectId}
+              onChange={(event) => setSelectedProjectId(event.target.value)}
+            >
+              <option value="">All active projects</option>
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.name}
+                </option>
+              ))}
+            </select>
             <button
               className="iconbtn"
               type="button"
@@ -180,6 +198,7 @@ export function App() {
                 goReview={goReview}
                 goReviewFiltered={goReviewFiltered}
                 pendingCount={pendingCount}
+                projectId={selectedProjectId || undefined}
               />
             ) : null}
             {view === "review" ? (
@@ -187,11 +206,24 @@ export function App() {
                 initialFilter={reviewFilter}
                 reviewer={reviewer}
                 setReviewer={setReviewer}
+                projectId={selectedProjectId || undefined}
               />
             ) : null}
-            {view === "quality" ? <QualityView goReview={goReview} /> : null}
-            {view === "export" ? <ExportView /> : null}
-            {view === "datasets" ? <DatasetsView /> : null}
+            {view === "quality" ? (
+              <QualityView
+                goReview={goReview}
+                projectId={selectedProjectId || undefined}
+              />
+            ) : null}
+            {view === "export" ? (
+              <ExportView projectId={selectedProjectId || undefined} />
+            ) : null}
+            {view === "datasets" ? (
+              <DatasetsView
+                selectedProjectId={selectedProjectId}
+                setSelectedProjectId={setSelectedProjectId}
+              />
+            ) : null}
             {view === "config" ? <ConfigView /> : null}
           </div>
         </div>
