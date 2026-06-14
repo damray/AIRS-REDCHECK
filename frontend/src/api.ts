@@ -270,7 +270,7 @@ export async function importDataset(input: {
       headers: {
         "Content-Type": input.file.type || contentTypeForFile(input.file.name),
       },
-      body: await input.file.text(),
+      body: input.file,
     },
   );
   return parseResponse(response, importSummarySchema);

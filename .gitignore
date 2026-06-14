@@ -51,6 +51,10 @@ test-results/
 blob-report/
 .nyc_output/
 
+# Downloaded scan reports (may contain sensitive prompts/outputs)
+scripts/reports/
+reports/
+
 # Database and runtime artifacts
 *.sqlite
 *.sqlite3

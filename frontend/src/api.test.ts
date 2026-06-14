@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { evaluationJobSchema, resultAttemptSchema } from "./api";
+import { evaluationJobSchema, importDataset, resultAttemptSchema } from "./api";
 
 describe("resultAttemptSchema", () => {
   it("accepts legacy result rows without evaluation error metadata", () => {
@@ -61,5 +61,51 @@ describe("evaluationJobSchema", () => {
     expect(parsed.processed_attempts).toBe(4);
     expect(parsed.succeeded_attempts).toBe(3);
     expect(parsed.failed_attempts).toBe(1);
+  });
+});
+
+describe("importDataset", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("posts the selected file without converting it to text", async () => {
+    const file = new File(
+      ['[{"prompt":"p","output":"o","threat":false}]'],
+      "attacks.json",
+      {
+        type: "application/json",
+      },
+    );
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          dataset_id: "dataset-1",
+          project_id: "project-1",
+          scan_name: "attacks.json",
+          detected_format: "static_json",
+          stream_count: 1,
+          attempt_count: 1,
+          imported_count: 1,
+          error_count: 0,
+          status: "imported",
+        }),
+        {
+          headers: { "Content-Type": "application/json" },
+          status: 201,
+        },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await importDataset({ file });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/datasets/import?filename=attacks.json",
+      expect.objectContaining({
+        body: file,
+        method: "POST",
+      }),
+    );
   });
 });

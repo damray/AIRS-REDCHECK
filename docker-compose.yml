@@ -21,7 +21,7 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://airs_redcheck:airs_redcheck@db:5432/airs_redcheck
       APP_NAME: AI Response Threat Evaluator
-      MAX_UPLOAD_BYTES: 26214400
+      MAX_UPLOAD_BYTES: 104857600
     ports:
       - "8000:8000"
     depends_on:
@@ -48,7 +48,7 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://airs_redcheck:airs_redcheck@db:5432/airs_redcheck
       APP_NAME: AI Response Threat Evaluator
-      MAX_UPLOAD_BYTES: 26214400
+      MAX_UPLOAD_BYTES: 104857600
       DEFAULT_RETRY_LIMIT: 2
       WORKER_POLL_SECONDS: 5
     depends_on:

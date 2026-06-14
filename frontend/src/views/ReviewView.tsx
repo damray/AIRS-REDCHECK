@@ -27,9 +27,10 @@ const BEHAVIOR_LABEL: Record<string, string> = {
 };
 
 const REVIEW_FILTERS = [
+  { key: "__NEEDS_REVIEW__", short: "Review required" },
   { key: "SOURCE_STRICTER_THAN_JUDGE", short: "Source stricter" },
   { key: "JUDGE_STRICTER_THAN_SOURCE", short: "Judge stricter" },
-  { key: "REVIEW_REQUIRED", short: "Review required" },
+  { key: "REVIEW_REQUIRED", short: "Uncertain" },
   { key: "AGREEMENT_THREAT", short: "Agree · threat" },
   { key: "AGREEMENT_SAFE", short: "Agree · safe" },
   { key: "EVALUATION_ERROR", short: "Errors" },
@@ -48,6 +49,7 @@ export function ReviewView({
 }) {
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<string[]>(initialFilter);
+  const [reviewRequiredOnly, setReviewRequiredOnly] = useState(true);
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [offset, setOffset] = useState(0);
@@ -61,6 +63,17 @@ export function ReviewView({
     () => ({
       ...defaultDisagreementFilters(),
       comparisonStatus: filter,
+      reviewed: reviewRequiredOnly ? "false" : "",
+      contextContains: search,
+    }),
+    [filter, reviewRequiredOnly, search],
+  );
+
+  const reviewRequiredCountFilters: ResultFilters = useMemo(
+    () => ({
+      ...defaultDisagreementFilters(),
+      comparisonStatus: filter,
+      reviewed: "false",
       contextContains: search,
     }),
     [filter, search],
@@ -71,9 +84,19 @@ export function ReviewView({
     queryFn: () =>
       fetchResults(resultFilters, offset, RESULTS_PAGE_SIZE, projectId),
   });
+  const reviewRequiredCountQuery = useQuery({
+    queryKey: [
+      "results",
+      "review-required-count",
+      reviewRequiredCountFilters,
+      projectId ?? "",
+    ],
+    queryFn: () => fetchResults(reviewRequiredCountFilters, 0, 1, projectId),
+  });
 
   const attempts = resultsQuery.data?.items ?? [];
   const total = resultsQuery.data?.total ?? 0;
+  const reviewRequiredCount = reviewRequiredCountQuery.data?.total ?? 0;
 
   const counts = useMemo(() => {
     const m: Record<string, number> = {};
@@ -111,6 +134,11 @@ export function ReviewView({
   });
 
   function toggleFilter(key: string) {
+    if (key === "__NEEDS_REVIEW__") {
+      setReviewRequiredOnly((value) => !value);
+      setOffset(0);
+      return;
+    }
     setFilter((f) =>
       f.includes(key) ? f.filter((x) => x !== key) : [...f, key],
     );
@@ -153,20 +181,29 @@ export function ReviewView({
               <button
                 key={f.key}
                 type="button"
-                className={`fchip${filter.includes(f.key) ? " active" : ""}`}
+                className={`fchip${(f.key === "__NEEDS_REVIEW__" ? reviewRequiredOnly : filter.includes(f.key)) ? " active" : ""}`}
                 onClick={() => toggleFilter(f.key)}
-                aria-pressed={filter.includes(f.key)}
+                aria-pressed={
+                  f.key === "__NEEDS_REVIEW__"
+                    ? reviewRequiredOnly
+                    : filter.includes(f.key)
+                }
               >
                 {f.short}
-                <span className="fc-n">{counts[f.key] || 0}</span>
+                <span className="fc-n">
+                  {f.key === "__NEEDS_REVIEW__"
+                    ? reviewRequiredCount
+                    : counts[f.key] || 0}
+                </span>
               </button>
             ))}
-            {filter.length ? (
+            {filter.length || reviewRequiredOnly ? (
               <button
                 type="button"
                 className="fchip"
                 onClick={() => {
                   setFilter([]);
+                  setReviewRequiredOnly(false);
                   setOffset(0);
                 }}
               >
@@ -208,11 +245,16 @@ export function ReviewView({
                 <div className="qrow-snippet">{a.source_output}</div>
                 <div className="qrow-meta">
                   <StatusPill status={a.comparison_status} />
-                  {a.review_decision ? (
-                    <span className="qrow-rev">
-                      <Icon name="checkCircle" size={12} /> Reviewed
-                    </span>
-                  ) : null}
+                  <span className="review-check qrow-rev">
+                    <input
+                      aria-label={`Review decision made for ${a.attempt_id}`}
+                      checked={Boolean(a.review_decision)}
+                      readOnly
+                      tabIndex={-1}
+                      type="checkbox"
+                    />
+                    Reviewed
+                  </span>
                 </div>
               </div>
             ))
@@ -619,9 +661,13 @@ function AttemptDetail({
 
           {a.review_decision ? (
             <div className="adj-done">
-              <span className="ad-ic">
-                <Icon name="checkCircle" size={20} />
-              </span>
+              <input
+                aria-label="Review decision made"
+                checked
+                className="review-check-input"
+                readOnly
+                type="checkbox"
+              />
               <div className="ad-body">
                 <strong>
                   Adjudicated ·{" "}

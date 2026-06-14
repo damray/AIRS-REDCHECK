@@ -230,8 +230,11 @@ const project = {
   updated_at: "2026-06-04T00:00:00Z",
 };
 
+let reviewedAttemptIds = new Set<string>();
+
 describe("App", () => {
   beforeEach(() => {
+    reviewedAttemptIds = new Set<string>();
     vi.stubGlobal("fetch", vi.fn(handleFetch));
   });
 
@@ -297,6 +300,29 @@ describe("App", () => {
       );
     });
     expect(await screen.findByText("Review saved")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(
+        within(queue).getByRole("button", { name: /Review required/ }),
+      ).toHaveTextContent("0");
+    });
+  });
+
+  it("shows a checked review decision box for adjudicated attempts", async () => {
+    renderApp();
+    const user = userEvent.setup();
+
+    const queue = await screen.findByLabelText("Disagreement results");
+    await user.click(
+      within(queue).getByRole("button", { name: /Review required/ }),
+    );
+    const reviewedCheckbox = await within(queue).findByLabelText(
+      "Review decision made for attempt-static-1",
+    );
+    expect(reviewedCheckbox).toBeChecked();
+
+    await user.click(within(queue).getByText("Refusal"));
+
+    expect(screen.getByLabelText("Review decision made")).toBeChecked();
   });
 
   it("renders triage dashboard with summary metrics", async () => {
@@ -338,7 +364,7 @@ describe("App", () => {
 
     await waitFor(() => {
       expect(fetch).toHaveBeenCalledWith(
-        "/api/results/attempts?comparison_status=EVALUATION_ERROR&limit=25&offset=0",
+        "/api/results/attempts?comparison_status=EVALUATION_ERROR&reviewed=false&limit=25&offset=0",
       );
     });
 
@@ -401,7 +427,7 @@ describe("App", () => {
 
     await waitFor(() => {
       expect(fetch).toHaveBeenCalledWith(
-        "/api/results/attempts?comparison_status=SOURCE_STRICTER_THAN_JUDGE&comparison_status=JUDGE_STRICTER_THAN_SOURCE&comparison_status=REVIEW_REQUIRED&project_id=project-1&limit=25&offset=0",
+        "/api/results/attempts?comparison_status=SOURCE_STRICTER_THAN_JUDGE&comparison_status=JUDGE_STRICTER_THAN_SOURCE&comparison_status=REVIEW_REQUIRED&reviewed=false&project_id=project-1&limit=25&offset=0",
       );
     });
   });
@@ -799,15 +825,45 @@ function handleFetch(
         items: [errorAttempt],
       });
     }
+    const effectiveAttempts = attempts.map((attempt) =>
+      reviewedAttemptIds.has(attempt.attempt_id)
+        ? {
+            ...attempt,
+            review_decision: "CONFIRM_JUDGE",
+            reviewer_identity: "analyst",
+            reviewed_at: "2026-06-04T00:02:00Z",
+          }
+        : attempt,
+    );
+    if (url.includes("reviewed=false")) {
+      const unreviewedAttempts = effectiveAttempts.filter(
+        (a) => !a.review_decision,
+      );
+      return jsonResponse({
+        total: unreviewedAttempts.length,
+        limit: 25,
+        offset: 0,
+        items: unreviewedAttempts,
+      });
+    }
     return jsonResponse({
-      total: attempts.length,
+      total: effectiveAttempts.length,
       limit: 25,
       offset: 0,
-      items: attempts,
+      items: effectiveAttempts,
     });
   }
   if (url === "/api/results/attempts/attempt-agent-1") {
-    return jsonResponse(attempts[0]);
+    return jsonResponse(
+      reviewedAttemptIds.has("attempt-agent-1")
+        ? {
+            ...attempts[0],
+            review_decision: "CONFIRM_JUDGE",
+            reviewer_identity: "analyst",
+            reviewed_at: "2026-06-04T00:02:00Z",
+          }
+        : attempts[0],
+    );
   }
   if (url === "/api/results/attempts/attempt-static-1") {
     return jsonResponse(attempts[1]);
@@ -836,6 +892,7 @@ function handleFetch(
     url.startsWith("/api/results/attempts/attempt-agent-1/review") &&
     init?.method === "PUT"
   ) {
+    reviewedAttemptIds.add("attempt-agent-1");
     return jsonResponse({
       id: "review-1",
       dataset_id: "dataset-1",

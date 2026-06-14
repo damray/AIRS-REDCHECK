@@ -29,6 +29,14 @@ from app.services.import_service import ImportRequest, ImportService, ImportServ
 router = APIRouter(prefix="/datasets", tags=["datasets"])
 
 
+def _format_bytes(size: int) -> str:
+    if size % (1024 * 1024) == 0:
+        return f"{size // (1024 * 1024)} MiB"
+    if size % 1024 == 0:
+        return f"{size // 1024} KiB"
+    return f"{size} bytes"
+
+
 @router.delete("", status_code=status.HTTP_200_OK)
 def reset_imported_datasets(db: Annotated[Session, Depends(get_db)]) -> dict[str, int]:
     dataset_count = db.execute(select(func.count()).select_from(Dataset)).scalar_one()
@@ -93,7 +101,10 @@ async def import_dataset(
     if len(content) > settings.max_upload_bytes:
         raise HTTPException(
             status_code=413,
-            detail="Upload exceeds configured maximum size.",
+            detail=(
+                "Upload exceeds configured maximum size "
+                f"of {_format_bytes(settings.max_upload_bytes)}."
+            ),
         )
 
     try:

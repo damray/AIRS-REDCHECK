@@ -406,3 +406,4 @@ def test_import_rejects_too_large_upload(client: TestClient, monkeypatch: Any) -
         monkeypatch.delenv("MAX_UPLOAD_BYTES", raising=False)
 
     assert response.status_code == 413
+    assert response.json()["detail"] == "Upload exceeds configured maximum size of 2 bytes."

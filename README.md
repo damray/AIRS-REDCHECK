@@ -67,6 +67,9 @@ Use `.env.example` as the reference for local environment values. Keep real
 secrets out of Git; Portkey API keys are configured through backend APIs and are
 masked in UI-facing responses.
 
+`MAX_UPLOAD_BYTES` controls the maximum CSV or JSON import size. The default
+Docker Compose configuration allows uploads up to 100 MiB.
+
 For production, replace the default Compose database password, keep PostgreSQL
 storage on a persistent volume, and run the API and worker as separate processes.
 
@@ -89,6 +92,10 @@ confirm the source verdict, confirm the Judge verdict, mark the case ambiguous,
 and add reviewer comments. This is the quality-control step that turns automated
 signals into adjudicated cases.
 
+The `Review required` filter shows attempts that still need a human decision.
+Its count decreases as decisions are saved. A checked review box marks attempts
+that already have an adjudication decision.
+
 ### Quality
 
 Shows reviewed quality metrics only after human adjudication. Accuracy,
@@ -105,7 +112,8 @@ input type, review state, and text search.
 
 Imports CSV or JSON red-team exports, shows import summaries and parsing errors,
 and starts evaluation jobs. Static exports and agent exports are normalized into
-streams and attempts while preserving the raw imported payload.
+streams and attempts while preserving the raw imported payload. Upload size is
+controlled by `MAX_UPLOAD_BYTES`; the default Docker Compose value is 100 MiB.
 
 ### Judge config
 
@@ -162,6 +170,51 @@ configuration, clean imports, and disciplined human review.
 For best results, calibrate the Judge prompt on a small reviewed sample before
 processing large datasets, keep the same prompt profile for comparable runs, and
 separate technical evaluation errors from safety disagreements.
+
+## Scripts
+
+The `scripts/get_report_or_token.py` helper can fetch an AIRS Red Team bearer
+token, list available scans, and download a selected report. Downloaded archives,
+JSON files, and CSV files are written under `scripts/reports/`, which is ignored
+by Git because reports can contain sensitive prompts and outputs.
+
+Required credentials:
+
+- `TSG_ID`
+- `CLIENT_ID`
+- `CLIENT_SECRET`
+
+Run with environment variables:
+
+```bash
+export TSG_ID=...
+export CLIENT_ID=...
+export CLIENT_SECRET=...
+python scripts/get_report_or_token.py
+```
+
+Run with a vault-backed environment file, for example with 1Password:
+
+```bash
+op run --env-file=.env.oauth -- python scripts/get_report_or_token.py
+```
+
+Useful options:
+
+```bash
+# Download the selected report as CSV instead of JSON.
+python scripts/get_report_or_token.py --csv
+
+# Print only the bearer token, for reuse in another command.
+python scripts/get_report_or_token.py --token-only
+
+# Include diagnostic request and token-claim details.
+python scripts/get_report_or_token.py --debug
+```
+
+Never commit credential files or downloaded reports. Keep `.env.oauth` and other
+local secret files outside Git, and keep downloaded report payloads in
+`scripts/reports/` or another ignored location.
 
 ## Recommended first milestone
 

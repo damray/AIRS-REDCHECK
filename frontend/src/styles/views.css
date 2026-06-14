@@ -567,10 +567,20 @@
   margin-left: auto;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
   font-size: 11px;
   color: var(--safe);
   font-weight: 600;
+}
+.review-check input,
+.review-check-input {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--safe);
+  flex: none;
+}
+.review-check input:not(:checked) {
+  opacity: 0.55;
 }
 
 .queue-empty {
@@ -948,9 +958,8 @@
   background: var(--safe-bg);
   border: 1px solid var(--safe-line);
 }
-.adj-done .ad-ic {
-  color: var(--safe);
-  flex: none;
+.adj-done .review-check-input {
+  margin-top: 2px;
 }
 .adj-done .ad-body {
   flex: 1;
