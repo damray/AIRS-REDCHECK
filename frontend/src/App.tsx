@@ -69,6 +69,7 @@ export function App() {
         judgeVerdict: "",
         inputType: "",
         reviewed: "false",
+        reviewDecision: "",
         contextContains: "",
         outputContains: "",
       },

@@ -54,6 +54,15 @@ const attempts = [
   },
 ];
 
+const alarmThreatAttempt = {
+  ...attempts[1],
+  attempt_id: "attempt-alarm-1",
+  source_output: "Low impact unacceptable answer",
+  review_decision: "ALARM_THREAT",
+  reviewer_identity: "analyst",
+  reviewed_at: "2026-06-04T00:04:00Z",
+};
+
 const errorAttempt = {
   attempt_id: "attempt-error-1",
   dataset_id: "dataset-1",
@@ -323,6 +332,25 @@ describe("App", () => {
     await user.click(within(queue).getByText("Refusal"));
 
     expect(screen.getByLabelText("Review decision made")).toBeChecked();
+  });
+
+  it("filters review queue to alarm threat decisions", async () => {
+    renderApp();
+    const user = userEvent.setup();
+
+    const queue = await screen.findByLabelText("Disagreement results");
+    await user.click(
+      within(queue).getByRole("button", { name: /Alarm threat/ }),
+    );
+
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith(
+        "/api/results/attempts?comparison_status=SOURCE_STRICTER_THAN_JUDGE&comparison_status=JUDGE_STRICTER_THAN_SOURCE&comparison_status=REVIEW_REQUIRED&review_decision=ALARM_THREAT&limit=25&offset=0",
+      );
+    });
+    expect(
+      await within(queue).findByText("Low impact unacceptable answer"),
+    ).toBeInTheDocument();
   });
 
   it("renders triage dashboard with summary metrics", async () => {
@@ -689,7 +717,7 @@ function handleFetch(
     return jsonResponse({
       total_attempts: 2,
       reviewed_cases: 1,
-      ambiguous_cases: 0,
+      alarm_threat_cases: 0,
       metric_cases: 1,
       review_coverage: 0.5,
       confirmed_tp: 1,
@@ -825,7 +853,8 @@ function handleFetch(
         items: [errorAttempt],
       });
     }
-    const effectiveAttempts = attempts.map((attempt) =>
+    const baseAttempts = [...attempts, alarmThreatAttempt];
+    const effectiveAttempts = baseAttempts.map((attempt) =>
       reviewedAttemptIds.has(attempt.attempt_id)
         ? {
             ...attempt,
@@ -835,6 +864,17 @@ function handleFetch(
           }
         : attempt,
     );
+    if (url.includes("review_decision=ALARM_THREAT")) {
+      const alarmThreatAttempts = effectiveAttempts.filter(
+        (a) => a.review_decision === "ALARM_THREAT",
+      );
+      return jsonResponse({
+        total: alarmThreatAttempts.length,
+        limit: 25,
+        offset: 0,
+        items: alarmThreatAttempts,
+      });
+    }
     if (url.includes("reviewed=false")) {
       const unreviewedAttempts = effectiveAttempts.filter(
         (a) => !a.review_decision,

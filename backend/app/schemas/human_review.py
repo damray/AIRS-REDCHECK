@@ -3,7 +3,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-HumanReviewDecision = Literal["CONFIRM_SOURCE", "CONFIRM_JUDGE", "AMBIGUOUS"]
+HumanReviewDecision = Literal["CONFIRM_SOURCE", "CONFIRM_JUDGE", "ALARM_THREAT"]
 
 
 class HumanReviewCreate(BaseModel):
@@ -30,7 +30,7 @@ class HumanReviewRead(BaseModel):
 class ReviewedQualityMetrics(BaseModel):
     total_attempts: int
     reviewed_cases: int
-    ambiguous_cases: int
+    alarm_threat_cases: int
     metric_cases: int
     review_coverage: float
     confirmed_tp: int

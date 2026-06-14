@@ -225,13 +225,17 @@ def test_export_disagreements_csv(client: TestClient, db_session: Session) -> No
 
 
 def test_export_reviewed_cases_csv(client: TestClient, db_session: Session) -> None:
-    _dataset_with_results(db_session)
+    _, _, attempts = _dataset_with_results(db_session)
+    db_session.query(HumanReview).filter(HumanReview.attempt_id == attempts[0].id).update(
+        {"decision": "ALARM_THREAT"}
+    )
+    db_session.commit()
 
     response = client.get("/results/export/reviewed.csv")
 
     assert response.status_code == 200
     body = response.text
-    assert "CONFIRM_SOURCE" in body
+    assert "ALARM_THREAT" in body
     assert "analyst" in body
     assert "agent prompt 1" not in body
     assert body.count("\n") == 2
@@ -319,6 +323,27 @@ def test_export_current_view_supports_reviewed_filter(
     assert "CONFIRM_SOURCE" in body
     assert "analyst" in body
     assert "agent prompt 1" not in body
+    assert body.count("\n") == 2
+
+
+def test_export_current_view_supports_review_decision_filter(
+    client: TestClient, db_session: Session
+) -> None:
+    _, _, attempts = _dataset_with_results(db_session)
+    db_session.query(HumanReview).filter(HumanReview.attempt_id == attempts[0].id).update(
+        {"decision": "ALARM_THREAT"}
+    )
+    db_session.commit()
+
+    response = client.get(
+        "/results/export/current.csv",
+        params={"review_decision": "ALARM_THREAT"},
+    )
+
+    assert response.status_code == 200
+    body = response.text
+    assert "ALARM_THREAT" in body
+    assert "CONFIRM_SOURCE" not in body
     assert body.count("\n") == 2
 
 

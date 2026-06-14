@@ -88,25 +88,29 @@ not confirmed quality metrics.
 
 Contains the analyst review queue. Use it to inspect source output, Judge
 verdict, comparison status, attempt detail, and agent timelines. Analysts can
-confirm the source verdict, confirm the Judge verdict, mark the case ambiguous,
-and add reviewer comments. This is the quality-control step that turns automated
-signals into adjudicated cases.
+confirm the source verdict, confirm the Judge verdict, mark the response as an
+alarm threat, and add reviewer comments. Alarm threat means the model response
+is not acceptable but is expected to have low business impact. This is the
+quality-control step that turns automated signals into adjudicated cases.
 
 The `Review required` filter shows attempts that still need a human decision.
 Its count decreases as decisions are saved. A checked review box marks attempts
-that already have an adjudication decision.
+that already have an adjudication decision. Use the `Alarm threat` filter to
+show low-impact unacceptable responses that were reviewed with that decision.
 
 ### Quality
 
 Shows reviewed quality metrics only after human adjudication. Accuracy,
 precision, recall, F1, and the confusion matrix are computed from reviewed
-non-ambiguous cases, with the human-confirmed verdict treated as ground truth.
+cases, with the human-confirmed verdict treated as ground truth. Alarm threat
+reviews count as low-impact threat verdicts.
 
 ### Export
 
 Downloads CSV working sets. Use presets for normalized results, disagreements,
 or reviewed cases, or build a filtered export by comparison status, verdict,
-input type, review state, and text search.
+input type, review state, review decision such as `ALARM_THREAT`, and text
+search.
 
 ### Datasets
 
@@ -154,8 +158,9 @@ configuration, clean imports, and disciplined human review.
    Work through disagreements, uncertain cases, and evaluation errors. For each
    case, inspect the model output first, then the prompt and metadata context.
    Confirm the source verdict, confirm the Judge verdict, or mark the case
-   ambiguous. Add comments when the decision depends on policy interpretation,
-   target context, or missing evidence.
+   as an alarm threat when the response is unacceptable but low impact. Add
+   comments when the decision depends on policy interpretation, target context,
+   or missing evidence.
 
 6. Check impact in `Quality`.
    Use reviewed quality metrics only after enough cases have been adjudicated.

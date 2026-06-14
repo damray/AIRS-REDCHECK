@@ -136,7 +136,7 @@ features:
     status: done
     depends_on: [F-009, F-010]
     acceptance:
-      - Results are filterable by comparison status, source verdict, Judge verdict, input type, category, severity, and technique.
+      - Results are filterable by comparison status, source verdict, Judge verdict, input type, category, severity, technique, and review decision.
       - Agent stream endpoint returns ordered attempt timeline.
       - Pagination is supported.
 
@@ -146,7 +146,7 @@ features:
     status: done
     depends_on: [F-011]
     acceptance:
-      - Reviewer can confirm source, confirm Judge, or mark ambiguous.
+      - Reviewer can confirm source, confirm Judge, or mark alarm threat for low-impact unacceptable responses.
       - Reviewer comment, identity, and timestamp are persisted.
       - Reviewed quality metrics use only adjudicated records.
 
@@ -175,7 +175,7 @@ features:
     implementation_notes:
       - Reuse the GET /results/attempts filter semantics for export endpoints.
       - Support multiple comparison_status values in one export request.
-      - Support source_verdict, judge_verdict, input_type, category, severity, technique, reviewed, and stream_id filters.
+      - Support source_verdict, judge_verdict, input_type, category, severity, technique, reviewed, review_decision, and stream_id filters.
       - Add an export-current-view path in the UI so the CSV reflects active filters rather than a hard-coded dataset.
       - Keep fixed convenience exports for normalized results, disagreements only, and reviewed cases if useful.
       - Use streamed CSV responses or batching before exporting very large datasets.
@@ -186,6 +186,7 @@ features:
       - User can export reviewed cases only.
       - User can export any filtered result set supported by the result explorer.
       - User can combine multiple filters in one export, such as comparison status plus source verdict plus severity.
+      - User can export cases by human review decision, such as ALARM_THREAT.
       - User can export all agreed threats, where comparison_status is AGREEMENT_THREAT.
       - CSV exports include enough columns to reconstruct the filtered table context.
       - Export tests cover fixed exports, multiple comparison statuses, agreed threats, reviewed filters, and combined filters.

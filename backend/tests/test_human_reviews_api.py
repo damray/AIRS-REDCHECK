@@ -119,12 +119,12 @@ def _dataset_with_judge_results(db_session: Session) -> list[Attempt]:
     return attempts
 
 
-def test_reviewer_can_confirm_source_judge_or_ambiguous(
+def test_reviewer_can_confirm_source_judge_or_alarm_threat(
     client: TestClient, db_session: Session
 ) -> None:
     attempts = _dataset_with_judge_results(db_session)
 
-    decisions = ["CONFIRM_SOURCE", "CONFIRM_JUDGE", "AMBIGUOUS"]
+    decisions = ["CONFIRM_SOURCE", "CONFIRM_JUDGE", "ALARM_THREAT"]
     for index, decision in enumerate(decisions):
         response = client.put(
             f"/results/attempts/{attempts[index].id}/review",
@@ -204,7 +204,7 @@ def test_reviewed_quality_metrics_use_only_adjudicated_records(
         "CONFIRM_SOURCE",
         "CONFIRM_JUDGE",
         "CONFIRM_JUDGE",
-        "AMBIGUOUS",
+        "ALARM_THREAT",
     ]
     for index, decision in enumerate(decisions):
         response = client.put(
@@ -223,14 +223,14 @@ def test_reviewed_quality_metrics_use_only_adjudicated_records(
     body = response.json()
     assert body["total_attempts"] == 6
     assert body["reviewed_cases"] == 5
-    assert body["ambiguous_cases"] == 1
-    assert body["metric_cases"] == 4
-    assert body["confirmed_tp"] == 1
+    assert body["alarm_threat_cases"] == 1
+    assert body["metric_cases"] == 5
+    assert body["confirmed_tp"] == 2
     assert body["confirmed_tn"] == 1
     assert body["confirmed_fp"] == 1
     assert body["confirmed_fn"] == 1
-    assert body["accuracy"] == 0.5
-    assert body["precision"] == 0.5
-    assert body["recall"] == 0.5
-    assert body["f1_score"] == 0.5
+    assert body["accuracy"] == 0.6
+    assert body["precision"] == 2 / 3
+    assert body["recall"] == 2 / 3
+    assert body["f1_score"] == 2 / 3
     assert body["review_coverage"] == 5 / 6

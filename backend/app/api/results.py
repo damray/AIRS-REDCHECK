@@ -63,6 +63,7 @@ def list_result_attempts(
     severity: Annotated[str | None, Query()] = None,
     technique: Annotated[str | None, Query()] = None,
     reviewed: Annotated[bool | None, Query()] = None,
+    review_decision: Annotated[str | None, Query()] = None,
     stream_id: Annotated[str | None, Query()] = None,
     source_prompt_contains: Annotated[str | None, Query()] = None,
     source_output_contains: Annotated[str | None, Query()] = None,
@@ -79,6 +80,7 @@ def list_result_attempts(
         severity=severity,
         technique=technique,
         reviewed=reviewed,
+        review_decision=review_decision,
         stream_id=stream_id,
         source_prompt_contains=source_prompt_contains,
         source_output_contains=source_output_contains,
@@ -127,6 +129,7 @@ def export_disagreements(
         severity=None,
         technique=None,
         reviewed=None,
+        review_decision=None,
         stream_id=None,
         source_prompt_contains=None,
         source_output_contains=None,
@@ -153,6 +156,7 @@ def export_reviewed_cases(
         severity=None,
         technique=None,
         reviewed=True,
+        review_decision=None,
         stream_id=None,
         source_prompt_contains=None,
         source_output_contains=None,
@@ -177,6 +181,7 @@ def export_filtered_results(
     severity: Annotated[str | None, Query()] = None,
     technique: Annotated[str | None, Query()] = None,
     reviewed: Annotated[bool | None, Query()] = None,
+    review_decision: Annotated[str | None, Query()] = None,
     stream_id: Annotated[str | None, Query()] = None,
     source_prompt_contains: Annotated[str | None, Query()] = None,
     source_output_contains: Annotated[str | None, Query()] = None,
@@ -191,6 +196,7 @@ def export_filtered_results(
         severity=severity,
         technique=technique,
         reviewed=reviewed,
+        review_decision=review_decision,
         stream_id=stream_id,
         source_prompt_contains=source_prompt_contains,
         source_output_contains=source_output_contains,
@@ -310,12 +316,11 @@ def get_reviewed_quality_metrics(
     ).scalar_one()
 
     counts = {"tp": 0, "tn": 0, "fp": 0, "fn": 0}
-    ambiguous_cases = 0
+    alarm_threat_cases = 0
     metric_cases = 0
     for attempt, review in rows:
-        if review.decision == "AMBIGUOUS":
-            ambiguous_cases += 1
-            continue
+        if review.decision in {"ALARM_THREAT", "AMBIGUOUS"}:
+            alarm_threat_cases += 1
         judge_result = _latest_judge_result(db, attempt.id)
         actual_verdict = _human_confirmed_verdict(attempt, judge_result, review)
         source_verdict = _normalized_binary_verdict(attempt.source_threat_normalized)
@@ -344,7 +349,7 @@ def get_reviewed_quality_metrics(
     return ReviewedQualityMetrics(
         total_attempts=total_attempts,
         reviewed_cases=reviewed_cases,
-        ambiguous_cases=ambiguous_cases,
+        alarm_threat_cases=alarm_threat_cases,
         metric_cases=metric_cases,
         review_coverage=_safe_divide(reviewed_cases, total_attempts) or 0.0,
         confirmed_tp=counts["tp"],
@@ -465,6 +470,7 @@ def _filtered_statement(
     severity: str | None,
     technique: str | None,
     reviewed: bool | None,
+    review_decision: str | None,
     stream_id: str | None,
     source_prompt_contains: str | None,
     source_output_contains: str | None,
@@ -501,6 +507,8 @@ def _filtered_statement(
         statement = statement.where(
             HumanReview.id.is_not(None) if reviewed else HumanReview.id.is_(None)
         )
+    if review_decision is not None:
+        statement = statement.where(HumanReview.decision == review_decision)
     if stream_id is not None:
         statement = statement.where(Attempt.stream_id == stream_id)
     if source_prompt_contains is not None:
@@ -651,6 +659,8 @@ def _human_confirmed_verdict(
         return _normalized_binary_verdict(attempt.source_threat_normalized)
     if review.decision == "CONFIRM_JUDGE" and judge_result is not None:
         return _normalized_binary_verdict(judge_result.response_verdict)
+    if review.decision in {"ALARM_THREAT", "AMBIGUOUS"}:
+        return "THREAT"
     return None
 
 

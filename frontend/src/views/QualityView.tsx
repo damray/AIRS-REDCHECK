@@ -45,8 +45,8 @@ export function QualityView({
         <p>
           Metrics computed <strong>only</strong> from human-adjudicated cases.
           The confirmed verdict is treated as ground truth and the{" "}
-          <em>source evaluator</em> is scored against it. Ambiguous reviews are
-          excluded.
+          <em>source evaluator</em> is scored against it. Alarm threat reviews
+          count as low-impact threat verdicts.
         </p>
       </div>
 
@@ -160,7 +160,7 @@ export function QualityView({
                   <strong>{q.reviewed_cases}</strong>
                   <p>of {q.total_attempts} attempts adjudicated</p>
                   <p style={{ marginTop: 6 }}>
-                    {q.ambiguous_cases} marked ambiguous · {q.metric_cases}{" "}
+                    {q.alarm_threat_cases} alarm threat · {q.metric_cases}{" "}
                     scored
                   </p>
                 </div>

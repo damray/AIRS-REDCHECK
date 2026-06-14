@@ -129,7 +129,7 @@ export const triageSummarySchema = z.object({
 export const reviewedQualitySchema = z.object({
   total_attempts: z.number(),
   reviewed_cases: z.number(),
-  ambiguous_cases: z.number(),
+  alarm_threat_cases: z.number(),
   metric_cases: z.number(),
   review_coverage: z.number(),
   confirmed_tp: z.number(),
@@ -221,13 +221,17 @@ export type HumanReview = z.infer<typeof humanReviewSchema>;
 export type PortkeyProfile = z.infer<typeof portkeyProfileSchema>;
 export type PromptProfile = z.infer<typeof promptProfileSchema>;
 export type EvaluationJob = z.infer<typeof evaluationJobSchema>;
-export type ReviewDecision = "CONFIRM_SOURCE" | "CONFIRM_JUDGE" | "AMBIGUOUS";
+export type ReviewDecision =
+  | "CONFIRM_SOURCE"
+  | "CONFIRM_JUDGE"
+  | "ALARM_THREAT";
 export type ResultFilters = {
   comparisonStatus: string[];
   sourceVerdict: string;
   judgeVerdict: string;
   inputType: string;
   reviewed: string;
+  reviewDecision: string;
   contextContains: string;
   outputContains: string;
 };
@@ -502,6 +506,7 @@ export function defaultDisagreementFilters(): ResultFilters {
     judgeVerdict: "",
     inputType: "",
     reviewed: "",
+    reviewDecision: "",
     contextContains: "",
     outputContains: "",
   };
@@ -586,6 +591,7 @@ function resultFilterParams(filters: ResultFilters): URLSearchParams {
   appendOptionalParam(params, "judge_verdict", filters.judgeVerdict);
   appendOptionalParam(params, "input_type", filters.inputType);
   appendOptionalParam(params, "reviewed", filters.reviewed);
+  appendOptionalParam(params, "review_decision", filters.reviewDecision);
   appendOptionalParam(params, "q", filters.contextContains);
   appendOptionalParam(params, "source_output_contains", filters.outputContains);
   return params;

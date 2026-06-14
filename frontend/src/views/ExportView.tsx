@@ -52,6 +52,7 @@ function emptyFilters(): ResultFilters {
     judgeVerdict: "",
     inputType: "",
     reviewed: "",
+    reviewDecision: "",
     contextContains: "",
     outputContains: "",
   };
@@ -66,6 +67,7 @@ export function ExportView({ projectId }: { projectId?: string }) {
     filters.judgeVerdict !== "" ||
     filters.inputType !== "" ||
     filters.reviewed !== "" ||
+    filters.reviewDecision !== "" ||
     filters.contextContains.trim() !== "" ||
     filters.outputContains.trim() !== "";
 
@@ -212,6 +214,20 @@ export function ExportView({ projectId }: { projectId?: string }) {
               <option value="">Any</option>
               <option value="true">Reviewed</option>
               <option value="false">Not reviewed</option>
+            </select>
+          </div>
+          <div className="field">
+            <label>Review decision</label>
+            <select
+              value={filters.reviewDecision}
+              onChange={(e) =>
+                setFilters({ ...filters, reviewDecision: e.target.value })
+              }
+            >
+              <option value="">Any</option>
+              <option value="CONFIRM_SOURCE">Confirm source</option>
+              <option value="CONFIRM_JUDGE">Confirm Judge</option>
+              <option value="ALARM_THREAT">Alarm threat</option>
             </select>
           </div>
         </div>

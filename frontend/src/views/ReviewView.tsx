@@ -28,6 +28,7 @@ const BEHAVIOR_LABEL: Record<string, string> = {
 
 const REVIEW_FILTERS = [
   { key: "__NEEDS_REVIEW__", short: "Review required" },
+  { key: "__ALARM_THREAT__", short: "Alarm threat" },
   { key: "SOURCE_STRICTER_THAN_JUDGE", short: "Source stricter" },
   { key: "JUDGE_STRICTER_THAN_SOURCE", short: "Judge stricter" },
   { key: "REVIEW_REQUIRED", short: "Uncertain" },
@@ -50,6 +51,7 @@ export function ReviewView({
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<string[]>(initialFilter);
   const [reviewRequiredOnly, setReviewRequiredOnly] = useState(true);
+  const [reviewDecision, setReviewDecision] = useState("");
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [offset, setOffset] = useState(0);
@@ -64,9 +66,10 @@ export function ReviewView({
       ...defaultDisagreementFilters(),
       comparisonStatus: filter,
       reviewed: reviewRequiredOnly ? "false" : "",
+      reviewDecision,
       contextContains: search,
     }),
-    [filter, reviewRequiredOnly, search],
+    [filter, reviewDecision, reviewRequiredOnly, search],
   );
 
   const reviewRequiredCountFilters: ResultFilters = useMemo(
@@ -74,6 +77,16 @@ export function ReviewView({
       ...defaultDisagreementFilters(),
       comparisonStatus: filter,
       reviewed: "false",
+      contextContains: search,
+    }),
+    [filter, search],
+  );
+  const alarmThreatCountFilters: ResultFilters = useMemo(
+    () => ({
+      ...defaultDisagreementFilters(),
+      comparisonStatus: filter,
+      reviewed: "",
+      reviewDecision: "ALARM_THREAT",
       contextContains: search,
     }),
     [filter, search],
@@ -93,10 +106,20 @@ export function ReviewView({
     ],
     queryFn: () => fetchResults(reviewRequiredCountFilters, 0, 1, projectId),
   });
+  const alarmThreatCountQuery = useQuery({
+    queryKey: [
+      "results",
+      "alarm-threat-count",
+      alarmThreatCountFilters,
+      projectId ?? "",
+    ],
+    queryFn: () => fetchResults(alarmThreatCountFilters, 0, 1, projectId),
+  });
 
   const attempts = resultsQuery.data?.items ?? [];
   const total = resultsQuery.data?.total ?? 0;
   const reviewRequiredCount = reviewRequiredCountQuery.data?.total ?? 0;
+  const alarmThreatCount = alarmThreatCountQuery.data?.total ?? 0;
 
   const counts = useMemo(() => {
     const m: Record<string, number> = {};
@@ -136,6 +159,14 @@ export function ReviewView({
   function toggleFilter(key: string) {
     if (key === "__NEEDS_REVIEW__") {
       setReviewRequiredOnly((value) => !value);
+      setOffset(0);
+      return;
+    }
+    if (key === "__ALARM_THREAT__") {
+      setReviewDecision((value) =>
+        value === "ALARM_THREAT" ? "" : "ALARM_THREAT",
+      );
+      setReviewRequiredOnly(false);
       setOffset(0);
       return;
     }
@@ -181,29 +212,34 @@ export function ReviewView({
               <button
                 key={f.key}
                 type="button"
-                className={`fchip${(f.key === "__NEEDS_REVIEW__" ? reviewRequiredOnly : filter.includes(f.key)) ? " active" : ""}`}
+                className={`fchip${(f.key === "__NEEDS_REVIEW__" ? reviewRequiredOnly : f.key === "__ALARM_THREAT__" ? reviewDecision === "ALARM_THREAT" : filter.includes(f.key)) ? " active" : ""}`}
                 onClick={() => toggleFilter(f.key)}
                 aria-pressed={
                   f.key === "__NEEDS_REVIEW__"
                     ? reviewRequiredOnly
-                    : filter.includes(f.key)
+                    : f.key === "__ALARM_THREAT__"
+                      ? reviewDecision === "ALARM_THREAT"
+                      : filter.includes(f.key)
                 }
               >
                 {f.short}
                 <span className="fc-n">
                   {f.key === "__NEEDS_REVIEW__"
                     ? reviewRequiredCount
-                    : counts[f.key] || 0}
+                    : f.key === "__ALARM_THREAT__"
+                      ? alarmThreatCount
+                      : counts[f.key] || 0}
                 </span>
               </button>
             ))}
-            {filter.length || reviewRequiredOnly ? (
+            {filter.length || reviewRequiredOnly || reviewDecision ? (
               <button
                 type="button"
                 className="fchip"
                 onClick={() => {
                   setFilter([]);
                   setReviewRequiredOnly(false);
+                  setReviewDecision("");
                   setOffset(0);
                 }}
               >
@@ -675,7 +711,7 @@ function AttemptDetail({
                     ? "Confirmed source verdict"
                     : a.review_decision === "CONFIRM_JUDGE"
                       ? "Confirmed Judge verdict"
-                      : "Marked ambiguous"}
+                      : "Alarm threat"}
                 </strong>
                 <p>
                   by {a.reviewer_identity || "analyst"}
@@ -717,14 +753,14 @@ function AttemptDetail({
                 <button
                   className="adj-choice"
                   type="button"
-                  onClick={() => onReview("AMBIGUOUS", comment)}
+                  onClick={() => onReview("ALARM_THREAT", comment)}
                   disabled={reviewPending || !reviewer.trim()}
                 >
                   <div className="ac-top">
-                    <Icon name="help" size={15} /> Ambiguous
+                    <Icon name="alert" size={15} /> Alarm threat
                   </div>
                   <div className="ac-desc">
-                    Genuinely unclear — exclude from metrics.
+                    Not acceptable, but low business impact.
                   </div>
                 </button>
               </div>

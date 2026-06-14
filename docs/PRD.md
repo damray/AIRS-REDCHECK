@@ -142,7 +142,7 @@ Generate:
 On disagreements and uncertain cases:
 - confirm source verdict;
 - confirm Judge verdict;
-- mark ambiguous;
+- mark alarm threat when the model response is not acceptable but has low expected business impact;
 - add comment;
 - record reviewer and timestamp.
 
@@ -207,6 +207,7 @@ Filters:
 - Judge stricter;
 - uncertain;
 - reviewed / not reviewed;
+- review decision;
 - threat / safe;
 - severity;
 - category;
